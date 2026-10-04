@@ -64,7 +64,7 @@ LanceDB table name: `semantic` (curated long-term memory; holds both `tier=core`
 | `outcome` | Utf8 | yes | `positive` / `negative` / `neutral`. Only meaningful for action-flavored types |
 | `from` | Utf8 | no | `user` / `agent` / `derived`. Defaults to `derived` |
 | `tier` | Utf8 | no | `core` / `semantic` / `episodic` (mirrors the table). A write with no tier lands episodic; older JSON without the field reads as `semantic` |
-| `cwd` | Utf8 | yes | The row's **scope**: the directory it is about (see [Scope and index](#scope-and-index)). NULL = about the person, visible everywhere. Core rows never carry one |
+| `scope` | Utf8 | yes | The absolute directory the row is about (see [Scope and index](#scope-and-index)). NULL = about the person, visible everywhere. Core rows never carry one. Named `cwd` on a v1 store |
 | `created_at` | Timestamp(Microsecond, UTC) | no | When the fact was added to memory |
 | `updated_at` | Timestamp(Microsecond, UTC) | yes | Last-edit time. The *activity timestamp* `updated_at ?? created_at` drives list `--sort` and the UI age badge |
 | `occurred_at` | Timestamp(Microsecond, UTC) | yes | When the thing described happened. Dates a row's day and is its TTL clock — `COALESCE(occurred_at, created_at)` for `list past_ttl`, the sweep, the days rollup and evict alike. Never a ranking signal |
@@ -74,13 +74,14 @@ LanceDB table name: `semantic` (curated long-term memory; holds both `tier=core`
 | `superseded_by` | Utf8 | yes | Id of the row that replaced this one |
 | `account_id` | Utf8 | yes | Whose memory (2026-09-08). NULL = the store owner's. Set only on rows from another person's paired phone: their account id, or `device:<id>` while signed out. Every query is scoped to one person (`account` / `all_accounts` args; absent = owner) |
 | `account_name` | Utf8 | yes | Display label for `account_id`; never a key |
-| `hook` | Utf8 | yes | One line (≤ 80 chars) saying what the row is for — what the index shows in its place. Expected on `preference` / `decision` rows (2026-10-04) |
-| `indexed` | Boolean | yes | Puts the row in its directory's index: every session at `cwd` or below loads the hook at start. NULL reads as false |
+| `summary` | Utf8 | yes | One line (≤ 80 chars) saying what the row is for — what the index shows in its place. Matters only on indexed rows; without one the index shows the content's opening. Named `hook` on a v1 store that took it |
+| `indexed` | Boolean | yes | Puts the row in its scope's index: every session at that directory or below loads its summary at start. NULL reads as false |
 
 Later nullable columns are added to an existing table on open
 (`ensure_late_schema_additions`). Store schema v2 (2026-10-04) dropped
-`contexts` and `tags`; a v1 store keeps them, filled from each row's
-existing values on write, until its owner accepts the gated drop (see
+`contexts` and `tags` and renamed `cwd` → `scope`, `hook` → `summary`; a
+v1 store keeps its old columns and names, filled from each row's existing
+values on write, until `ling-mem apply-schema --yes` (see
 [Versioning](#versioning) and `doc/schema-versioning.md`).
 
 **Embedding dimension: 1024** (Arrow `FixedSizeList<Float32, 1024>`), determined by the default embedding model (below).
@@ -120,14 +121,15 @@ If the configured model output dimension doesn't match the table's `FixedSizeLis
 
 | Subcommand | Purpose | Flags |
 |:--|:--|:--|
-| `add` | Insert one or many facts (positional content OR NDJSON on stdin) | `--type`, `--tier` (omitted → the daemon decides: episodic, the losers' tier with `--replace`, semantic with `--indexed`), `--from`, `--outcome`, `--cwd`, `--scope`, `--root`, `--hook`, `--indexed`, `--global`, `--occurred-at`, `--source-session`, `--replace` (repeatable), `--user-directed`, `--stdin`, `--episodic` |
+| `add` | Insert one or many facts (positional content OR NDJSON on stdin) | `--type`, `--tier` (omitted → the daemon decides: episodic, the losers' tier with `--replace`, semantic with `--indexed`), `--from`, `--outcome`, `--cwd` (request only: the default scope), `--scope`, `--root`, `--summary`, `--indexed`, `--global`, `--occurred-at`, `--source-session`, `--replace` (repeatable), `--user-directed`, `--stdin`, `--episodic` |
 | `get <id>` | Fetch one fact | — |
-| `search <query>` | Semantic + filter search | `--type` (repeatable, OR), `--tier`, `--from`, `--outcome`, `--since`/`--until`/`--older-than`/`--day`, `--app` (repeatable), `--indexed`, `--source-session`, `--cwd-scope`, `--include-expired`, `--superseded-by`, `--limit`, `--episodic` |
+| `search <query>` | Semantic + filter search | `--type` (repeatable, OR), `--tier`, `--from`, `--outcome`, `--since`/`--until`/`--older-than`/`--day`, `--app` (repeatable), `--indexed`, `--source-session`, `--scope-root` (aliases `--project`, `--cwd-scope`), `--include-expired`, `--superseded-by`, `--limit`, `--episodic` |
 | `list` | Non-semantic browse | same filters as `search`, plus `--sort`, `--limit`, `--offset`, `--unjudged` |
-| `edit <id>` (alias `update`) | Modify fields | `--content`, `--hook` / `--clear-hook`, `--indexed true\|false`, `--type`, `--tier`, `--from`, `--outcome` / `--clear-outcome`, `--cwd` / `--clear-cwd`, `--user-directed` |
+| `edit <id>` (alias `update`) | Modify fields | `--content`, `--summary` / `--clear-summary`, `--indexed true\|false`, `--type`, `--tier`, `--from`, `--outcome` / `--clear-outcome`, `--scope` / `--clear-scope` (aliases `--cwd` / `--clear-cwd`), `--user-directed` |
 | `delete <id>` | Hard delete | `--yes` to skip confirmation |
-| `forget` | Bulk delete by filter | the `list` filters (never `--cwd-scope` alone); requires `--yes` |
+| `forget` | Bulk delete by filter | the `list` filters (never `--scope-root` alone); requires `--yes` |
 | `session-start` | What a session loads at start (see [Session start](#session-start)) | `--cwd`, `--root`; text prints the block, `--format json` the payload |
+| `apply-schema` | Run the gated store-schema step (v1→v2): backup, reshape both tables, stamp the sidecar | `--yes` (required; without it the daemon refuses) |
 | *(HTTP only)* `restamp` | Move every row stamped `from` to an account (or to the owner when `account_id` is absent) | the once-only re-stamp when a signed-out phone signs in; the engine calls it, a phone may not |
 | *(HTTP only)* `accounts` | Every non-owner account with rows, with name and count | what a per-account maintenance pass iterates |
 
@@ -168,8 +170,8 @@ Fact serialization matches the Rust `Fact` struct with one rename: the Rust fiel
   "id": "550e8400-e29b-41d4-a716-446655440000",
   "content": "Prefers debug-level logging during dev stage",
   "type": "preference",
-  "cwd": "/Users/alex/workspace/linggen",
-  "hook": "debug-level logs while in dev",
+  "scope": "/Users/alex/workspace/linggen",
+  "summary": "debug-level logs while in dev",
   "indexed": true,
   "from": "user",
   "created_at": "2026-04-21T10:30:00.000Z"
@@ -229,7 +231,7 @@ rows with no real keyword match stay filtered. The console passes
 
 SQL metadata filters are applied before scoring:
 
-- `cwd_scope` (recall scope, see below), `apps`, `indexed`, `cwd_in`
+- `scope_root` (recall scope, see below), `apps`, `indexed`, the index's directory list
 - `type` match: exact equality
 - `occurred_at` range: timestamp comparison with fallback to `created_at` via COALESCE
 
@@ -246,10 +248,11 @@ non-stored score columns:
 
 - `types` (list/search/count): any of these types, alongside the singular `type`
 - `exclude_types`: none of these types
-- `cwd_scope`: the session's recall scope, given as its root (below)
+- `scope_root`: the session's recall scope, given as its root (below);
+  `cwd_scope` is its pre-v2 name, accepted for one release
 - `apps`: rows under `~/.linggen/skills/<name>` for any listed name (the
   phone's pull; `contexts_any` is read as its old spelling)
-- `indexed`, `cwd_in`: the index query
+- `indexed`: the index query
 
 ### Scope and index
 
@@ -259,10 +262,10 @@ hosts only hand the daemon paths.
 - **Root**: the git root of the session cwd; outside git, where the
   session started. A skill's own dir (`~/.linggen/skills/<name>`) is its
   own root. Hosts send it (`root`); the daemon finds it when they don't.
-- **Recall scope** (`cwd_scope` = root), applied in SQL before ranking:
+- **Recall scope** (`scope_root` = root), applied in SQL before ranking:
   an owner root sees rows under it (any depth), rows at its parents and
-  rows with no `cwd`; a skill's dir sees only rows under it; `$HOME`,
-  `~/.linggen` and temp dirs see rows with no `cwd`, plus at most two rows
+  rows with no `scope`; a skill's dir sees only rows under it; `$HOME`,
+  `~/.linggen` and temp dirs see rows with no `scope`, plus at most two rows
   filed under a directory whose cosine reaches `no_root_project_min_score`
   (config, default 0.70; never `preference` rows). While a store
   still has the v1 `contexts` column, a skill scope also matches rows
@@ -270,15 +273,17 @@ hosts only hand the daemon paths.
 - **Writing**: `memory_add` takes the model's `scope` (a candidate from
   the session-start line), resolved against `root` and accepted when it
   is an existing directory inside root or a parent of root below `$HOME`;
-  otherwise the host-stamped `cwd`. `global` and core rows get none. A
+  otherwise the host-stamped `cwd` (a request param, never stored under that
+  name). `global` and core rows get none. A
   `replace_ids` write with no `scope` takes the losers' common directory
   (none when any has none) and their highest tier.
 - **Candidates**: root, the dirs from root down to cwd, root's
   subdirectories (two levels) carrying `SKILL.md`, `CLAUDE.md`,
   `README*`, `Cargo.toml`, `package.json` or `pubspec.yaml`, and root's
   parents below `$HOME`.
-- **Index**: rows with `indexed = true` whose `cwd` is the session cwd or
-  a parent, nearest dir first then newest; one `- hook (id=…)` line each
+- **Index**: rows with `indexed = true` whose `scope` is the session cwd or
+  a parent, nearest dir first then newest; one `- summary (id=…)` line each
+  (the content's opening when a row has none)
   under `## Index — <dir>`, within 3000 chars, with a skipped count.
 
 ### Session start
@@ -293,8 +298,9 @@ session start and injects its `block`, so the rendering lives here, once.
   (`Memory scopes here: …`) and the index.
 - **Output**: `{core, index, candidates, candidates_line, core_block,
   index_block, index_skipped, block, chars}`.
-- `memory_add {global: true}` stores a row with no `cwd` whatever the host
-  stamped; `memory_update {global: true}` clears a row's `cwd`.
+- `memory_add {global: true}` stores a row with no `scope` whatever the host
+  stamped; `memory_update {scope}` moves a row (absolute dir, `~/` allowed)
+  and `{global: true}` clears its scope.
 
 ### Deletion
 
@@ -360,12 +366,12 @@ Semver, and the contract is enforced — the binary semver is what plugins/skill
 
 The rule that makes `^1` auto-update safe: **a non-migratable store change is always a MAJOR release — no exceptions.** Majors sit outside the range and are never auto-installed; a manual major jump is caught by the guard, not silently applied.
 
-`STORE_SCHEMA_VERSION = 2` (2026-10-04): v1→v2 drops `contexts`/`tags`.
-It is a **gated** step — it runs only when the owner accepts it from the
-scope migration review (console, or `ling-mem scope-migration`), after a
-backup; until then the store opens and works as v1 (sidecar stays `1`,
-so older binaries still open it). The review itself only proposes — new
-scopes, hooks and index flags — and changes nothing until accepted.
+`STORE_SCHEMA_VERSION = 2` (2026-10-04): v1→v2 drops `contexts`/`tags`
+and renames `cwd` → `scope`, `hook` → `summary`, values carried. It is a
+**gated** step — it runs only on `ling-mem apply-schema --yes` (daemon:
+`POST /api/schema/apply {"confirm":true}`), which backs up to
+`memory/backups/schema-v2-<UTC timestamp>/` first; until then the store
+opens and works as v1 (sidecar stays `1`, so older binaries still open it).
 
 `1.0.0` baseline: `STORE_SCHEMA_VERSION = 1`. A pre-1.0 (`0.7.x`) store carries no sidecar → classified `Adopt` → stamped `1` on first 1.x open; the Arrow schema is unchanged across the boundary, so the migration is a no-op. The `--migrate-data` subcommand idea is superseded by `ling-mem export | import` (schema-agnostic JSONL — the escape hatch for the non-migratable/MAJOR case).
 

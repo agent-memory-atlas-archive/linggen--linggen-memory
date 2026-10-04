@@ -90,17 +90,18 @@ unmigrated store.
 
 | From → to | What | When it runs |
 |---|---|---|
-| 1 → 2 (2026-10-04) | Drop `contexts` and `tags` (`doc/scope-index-spec.md`). `hook` + `indexed` are additive and ride `ensure_late_schema_additions`. | **Gated** — only when the owner accepts the scope migration (console review page → "Apply schema step", or `ling-mem scope-migration apply-schema`), after a backup. Never at open. |
+| 1 → 2 (2026-10-04) | Drop `contexts` and `tags`; rename `hook` → `summary` and `cwd` → `scope`, values carried (`doc/scope-index-spec.md`). `summary` + `indexed` are additive and ride `ensure_late_schema_additions` (a v1 store that already took the pair holds the first as `hook`; one that never did gets `summary` at open). | **Gated** — only on `ling-mem apply-schema --yes` (daemon: `POST /api/schema/apply {"confirm":true}`). It backs up to `~/.linggen/memory/backups/schema-v2-<UTC timestamp>/`, reshapes both tables, then stamps the sidecar `2`. Never at open. |
 
 A gated step changes the open-time contract in one way: a store waiting on
 it opens normally, `run_migrations` skips the step, and the sidecar keeps the
 layout the store actually has (`stamp_layout`: `1` while any table carries the
-legacy columns, `2` once none does). Writes reshape their batches to the
-table's own schema (`schema::conform_keeping`), filling the legacy lists with
-the row's existing values, so the v1 columns stay intact for the migration to
-read. Because the sidecar stays `1` until the drop, an older binary still opens
-the store; after the drop it is refused (`TooNew`), which is the point —
-an older binary would write `contexts`/`tags` into a table that has none.
+legacy columns or names, `2` once none does). Writes reshape their batches to
+the table's own schema (`schema::conform_keeping`): the legacy lists keep the
+row's existing values, and `summary`/`scope` are written under their v1 names
+`hook`/`cwd`, so the v1 columns stay intact for the step to read. Because the
+sidecar stays `1` until the step, an older binary still opens the store;
+after it the older binary is refused (`TooNew`), which is the point — it
+would write `contexts`/`tags`/`cwd`/`hook` into a table that has none.
 
 ## Discipline: what a version bump means (the semver contract)
 
@@ -125,7 +126,8 @@ ling-mem import <file.jsonl>     # re-inserts; vectors re-embedded on import
 ```
 
 - Export is schema-version-agnostic: it reads whatever columns exist and writes
-  the logical fact (id, content, tier, type, tags, contexts, timestamps, …).
+  the logical fact (id, content, tier, type, scope, summary, timestamps, …).
+  Import still reads a v1 export's `cwd`.
 - Import targets the current schema, re-embedding `content` to populate
   `vector` (so a model/dim change is recoverable, just lossy on the old vectors).
 - Recovery flow for a major break: `export` → `rm -rf memory.lancedb` → upgrade

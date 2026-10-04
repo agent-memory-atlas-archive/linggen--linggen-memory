@@ -5,7 +5,7 @@
 #
 #   memory_add           cwd (the row's default scope), root (what a model's
 #                        `scope` resolves against), source_session, host
-#   memory_search        cwd_scope = root (recall: rows under the root, at
+#   memory_search        scope_root = root (recall: rows under the root, at
 #                        its parents, and about the person)
 #   memory_session_start cwd, root
 #
@@ -23,7 +23,7 @@
 # CLAUDE CODE ONLY, and not by choice: Codex's hook runner fires PreToolUse
 # for shell tools only and REJECTS `updatedInput` (openai/codex#18491), so
 # there is no seam between the model and the daemon there. On Codex the
-# per-turn recall is still scoped — recall.sh sends `cwd_scope` itself — but
+# per-turn recall is still scoped — recall.sh sends `scope_root` itself — but
 # the model's own memory calls go unstamped. When Codex ships input rewrite,
 # add the PreToolUse matcher to codex.hooks.json and this script serves both
 # hosts unchanged.
@@ -58,7 +58,7 @@ root=""
 if [ -n "$cwd" ]; then root="$(memory_root "$cwd")"; fi
 
 # A field the caller set wins — the one legitimate case is a promote pass
-# carrying the ORIGINAL row's session, cwd and host forward.
+# carrying the ORIGINAL row's session, scope (sent as `cwd`) and host forward.
 has() { [ -n "$(printf '%s' "$input" | jq -r --arg f "$1" '.tool_input[$f] // empty' 2>/dev/null)" ]; }
 
 stamp="{}"
@@ -72,7 +72,7 @@ case "$verb" in
   add)
     # A write that names ANOTHER session's row is not this session's
     # authorship: the dream's promote and the scan's backfill carry the
-    # original row's source_session — and its cwd, when it had one. This
+    # original row's source_session — and its scope as `cwd`, when it had one. This
     # session's paths stamped over the gap would rescope someone else's
     # memory to wherever the dream happened to run.
     src="$(printf '%s' "$input" | jq -r '.tool_input.source_session // empty' 2>/dev/null || true)"
@@ -88,7 +88,7 @@ case "$verb" in
     # $HOME / ~/.linggen it is a deliberate whole-store lookup (the dream runs
     # there); the per-turn recall (recall.sh) is the one that narrows those
     # sessions to rows about the person.
-    if is_project_dir "$root"; then add_field cwd_scope "$root"; fi
+    if is_project_dir "$root"; then add_field scope_root "$root"; fi
     ;;
   session_start)
     add_field cwd "$cwd"

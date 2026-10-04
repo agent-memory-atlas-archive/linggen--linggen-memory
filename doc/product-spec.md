@@ -50,8 +50,8 @@ The `dream` mission is the consolidation pass: it dedupes episodic capture, prom
 See `tech-spec.md` for the wire format. The user-facing mental model:
 
 - **What** — the fact text itself, self-contained (including any scoping conditions).
-- **Where it belongs** — its scope: the directory it is about (`cwd`), or none when it is about the person. A session sees rows from its directory, its parents, and about the person.
-- **Its one-line hook** — what the row is for; standing rules are **indexed**, so every session in their directory loads the hook at start.
+- **Where it belongs** — its scope: the directory it is about, or none when it is about the person. A session sees rows from its directory, its parents, and about the person.
+- **Its one-line summary** — what the row is for; standing rules are **indexed**, so every session in their directory loads the summary at start.
 - **What kind of fact** — one of seven canonical types.
 - **Who said/did it** — user / agent / derived.
 - **Result if applicable** — worked / failed / neutral.
@@ -91,10 +91,10 @@ No `activity` catch-all. Weekly-status-style entries (the drift category in prio
 
 ```bash
 ling-mem add "prefers concise replies" --type preference --from user \
-  --tier semantic --hook "concise replies" --indexed
-ling-mem search "dock calibration" --cwd-scope ~/workspace/rust/sanji --limit 5
+  --tier semantic --summary "concise replies" --indexed
+ling-mem search "dock calibration" --scope-root ~/workspace/rust/sanji --limit 5
 ling-mem list --type fixed --since 2026-01-01
-ling-mem edit <id> --hook "what it is for" --cwd ~/workspace
+ling-mem edit <id> --summary "what it is for" --scope ~/workspace
 ling-mem archive <id>
 ling-mem delete <id>
 ling-mem forget --type fixed --older-than 30d

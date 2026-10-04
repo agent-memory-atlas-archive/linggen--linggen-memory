@@ -138,7 +138,7 @@ Field layout (top to bottom):
 | `type`      | `<select>` over 7 `MemoryType` values                   | |
 | `from`      | `<select>` over 3 `Origin` values                     | |
 | `outcome`   | `<select>` — `—, positive, negative, neutral`         | `—` sends `clear_outcome: true` |
-| `cwd`       | `<input>` with a × to clear                           | clearing sends `clear_cwd: true` |
+| `scope`     | `<input>` with a × to clear                           | clearing sends `clear_scope: true` |
 | `occurred_at` | text input (ISO 8601 or `YYYY-MM-DD`) + clear; **add-only** for v0.1 | see note below |
 | `created_at`  | read-only, absolute UTC                             | |
 | `source_session` | read-only, truncated with copy button            | |
@@ -253,7 +253,7 @@ Used for the row card's left border and the type chip's background tint.
 | Filter browse          | `POST /api/memory/list {filters, sort, limit, offset}`                  | Replace list if `offset=0`, append otherwise. |
 | Semantic search        | `POST /api/memory/search {query, ...filters, limit}`                    | Replace list. Sort select disabled. |
 | Open row               | `POST /api/memory/get {id}` (refresh) — optional; list payload is enough on optimistic path | Populate detail. |
-| Save edits             | `POST /api/memory/update {id, ...diff, clear_outcome?, clear_cwd?}`     | Update row + detail. |
+| Save edits             | `POST /api/memory/update {id, ...diff, clear_outcome?, clear_scope?, clear_summary?}`     | Update row + detail. |
 | Add                    | `POST /api/memory/add {content, ...fields}`                             | Prepend to list; select. |
 | Delete                 | `POST /api/memory/delete {id}`                                          | Remove from list; clear detail if matched. |
 | Forget by filter       | `POST /api/memory/forget {filters}` (preceded by pre-flight `list`)     | Rerun current list request. |

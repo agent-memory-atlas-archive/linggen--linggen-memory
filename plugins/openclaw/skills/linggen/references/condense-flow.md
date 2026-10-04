@@ -63,13 +63,15 @@ memory_add {
   "content": "<current state first; history as a short dated span; keep lessons, drop dead provisional markers>",
   "type": "<most current member's type>",
   "tier": "semantic",
-  "hook": "<one line, when the type is preference or decision>",
+  "indexed": true,
+  "summary": "<one line — only when a member was indexed>",
   "replace_ids": ["<every member id>"]
 }
 ```
 
 No `cwd` / `scope`: with `replace_ids` the daemon files the survivor
 under the members' common directory (none when any member has none).
+Pass `indexed` and `summary` only when a member was indexed.
 CLI: `ling-mem add "<survivor>" --tier semantic --replace <id>` per
 member — the same atomic call.
 

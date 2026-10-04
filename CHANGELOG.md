@@ -4,40 +4,70 @@
 
 ### Added
 
-- **A row's `cwd` is its scope** — the directory it is about; none =
-  about the person. `memory_add` takes `scope` (one of the session's
+- **A row's `scope`** (was `cwd`) — the absolute directory it is about;
+  none = about the person. `memory_add` takes `scope` (one of the session's
   "Memory scopes here" candidates); the daemon accepts an existing dir
   inside the session root or a parent of it below `$HOME`, else the
-  host-stamped cwd. Hosts stamp `cwd`, `root`, `source_session`, `host`.
-- **`hook` and `indexed`.** A one-line hook (≤ 80 chars) on preference and
-  decision rows; `indexed` rows load their hook at session start in their
-  directory and below (nearest first, 3000 chars, `## Index — <dir>`).
+  host-stamped `cwd`. Hosts stamp `cwd` (request only), `root`,
+  `source_session`, `host`. `memory_update` takes `scope` (absolute dir,
+  `~/` allowed) to move a row; `global: true` clears it.
+- **`summary` and `indexed`.** A one-line summary (≤ 80 chars) is what the
+  index shows; it matters only on indexed rows, and one without falls back
+  to the content's opening. `indexed` rows load at session start in their
+  scope and below (nearest first, 3000 chars, `## Index — <dir>`).
 - **`session_start` takes `cwd`/`root`**: core + the candidates line + the
   index. CLI `session-start --cwd --root`.
-- **Recall scope by root**: rows under the root, at its parents, and about
-  the person; a skill's dir (`~/.linggen/skills/<name>`) sees only its own
-  rows; `$HOME`, `~/.linggen` and temp see person rows plus at most two
-  strong project matches (cosine ≥ `no_root_project_min_score`, 0.70; never
-  preferences).
+- **Recall scope by root** (`scope_root`): rows under the root, at its
+  parents, and about the person; a skill's dir (`~/.linggen/skills/<name>`)
+  sees only its own rows; `$HOME`, `~/.linggen` and temp see person rows
+  plus at most two strong project matches (cosine ≥
+  `no_root_project_min_score`, 0.70; never preferences).
+- **`ling-mem apply-schema --yes`** (daemon `POST /api/schema/apply
+  {"confirm":true}`) runs the gated schema v2 step: backup to
+  `~/.linggen/memory/backups/schema-v2-<UTC timestamp>/`, reshape both
+  tables, stamp the sidecar `2`.
+- **The dream fixes scope and index itself.** When sure, it moves a
+  misfiled row, indexes a from=user standing rule (with a summary), drops
+  an indexed row that is no standing rule, or rewrites a bad summary — via
+  `memory_update`, at most 10 per run, each logged as a `FIX` status line.
+  These fields are not the row's words, so from=user rows qualify; content
+  is never edited. Unsure → the row is left alone.
 - `memory_add` advertises `from`; recall lines read
   `From memory (<type>, from=<who>, <host>, <date>, score, id)`.
-- Review-queue kinds `index` and `scope`: the dream proposes, the person
-  confirms.
-- CLI: `add --scope --root --hook --indexed --global`, `edit --hook
-  --clear-hook --indexed`, filters `--app --indexed --source-session`.
-- Console: hook / indexed / scope in the detail pane and row chips;
+- CLI: `add --scope --root --summary --indexed --global`, `edit --summary
+  --clear-summary --indexed --scope --clear-scope`, filters `--app
+  --indexed --source-session --scope-root`.
+- Console: summary / indexed / scope in the detail pane and row chips;
   `/app:`, `/scope:`, `/indexed:` filters.
-- Scope migration review (proposals only; the store is unchanged until
-  accepted).
+
+### Changed
+
+- **`cwd_scope` → `scope_root`** on search/list (CLI `--scope-root`).
+  `cwd_scope` and `--cwd-scope` stay as aliases for one release;
+  `--project` still works. `edit --cwd` / `--clear-cwd` alias `--scope` /
+  `--clear-scope`.
+- Fact JSON carries `scope`, not `cwd`; export writes `scope`, import
+  still reads `cwd`.
+- Dream promotes carry the row's stored scope as the request's `cwd` and
+  its `summary`; digests leave scope out (the daemon files them under the
+  members' common directory) and stay indexed, with a summary, when a
+  member was.
 
 ### Removed
 
 - **`contexts` and `tags`.** Gone from the model, MCP and CLI; a digest is
   known by the rows whose `superseded_by` points at it. Store schema v2
-  drops the columns in a **gated** step: it runs only when the owner
-  accepts it after a backup; until then the store stays v1 (older binaries
-  still open it) and writes keep each row's old values. A phone's
-  `contexts_any` is read as app names.
+  drops the columns and renames `hook` → `summary`, `cwd` → `scope` in one
+  **gated** step, never at open: until `apply-schema` runs, the store
+  stays v1 (older binaries still open it) and writes keep each row's old
+  values under the old names. A phone's `contexts_any` is read as app
+  names.
+- **The scope review.** The console "Scope review" tab, the
+  `/api/migration/scope/*` endpoints and `ling-mem scope-migration` are
+  gone; nobody reviews scope by hand.
+- **Review-queue kinds `index` and `scope`.** `memory_issue_add` takes
+  `chain`, `stale-status`, `contradiction`, `subject`; the dream applies
+  scope and index fixes itself.
 
 ### Fixed
 
@@ -45,9 +75,9 @@
 - `from` is on the `memory_add` schema.
 - One `source_session` story: host-filled everywhere; recall.sh stops
   asking the model.
-- Merges keep the surviving row's `cwd` unless empty (the cross-tier merge
+- Merges keep the surviving row's scope unless empty (the cross-tier merge
   overwrote it); a replacement takes its losers' common scope; chains rows
-  carry `cwd`.
+  carry scope.
 - `replace_ids` keeps the loser's tier.
 - One TTL clock, `COALESCE(occurred_at, created_at)`, for list, sweep, the
   days rollup and evict.

@@ -146,7 +146,7 @@ contradiction (leaves the candidate in episodic) rather than guessing:
 
 | Operation | Silent if… | Ask if… |
 |:---|:---|:---|
-| Dedup two rows that mean the same thing | Same value, near-identical phrasing, same scope (`cwd`) | Different scopes, different timestamps, or any value drift between them |
+| Dedup two rows that mean the same thing | Same value, near-identical phrasing, same `scope` | Different scopes, different timestamps, or any value drift between them |
 | Resolve a contradiction (same subject, incompatible values) | **Never silent.** Always ask. | Always |
 | Generalize utterances into a "user always X" rule | **Never.** Append individual utterances; live retrieval surfaces patterns. | — |
 | Merge distinct facts into one synthesized story | **Never.** They're distinct; append both. | — |
@@ -183,7 +183,7 @@ When a candidate emerges, route to one of two tiers or drop it.
 | tier | When | Action |
 |:---|:---|:---|
 | `core` | Universal about the person (no scope, never a preference) | `ling-mem add "..." --tier core --type fact ...` |
-| `semantic` | Intent / decision / preference / learning | `ling-mem add "..." --tier semantic --type <type> [--scope <dir>\|--global] [--hook "..."] ...` |
+| `semantic` | Intent / decision / preference / learning | `ling-mem add "..." --tier semantic --type <type> [--scope <dir>\|--global] [--summary "..." --indexed] ...` |
 | (skip) | Project-internal implementation detail / activity / session-arc / meta-feedback | Drop. The agent reads code or user-authored project files when needed. |
 
 Most candidates skip. The core tier grows slowly by design — a noisy
@@ -191,17 +191,18 @@ Most candidates skip. The core tier grows slowly by design — a noisy
 we'd rather miss 3 saves than force the user to curate 30 low-signal
 rows.
 
-## Scope, hook, index
+## Scope, summary, index
 
-- **Scope (`cwd`)** — the directory a row is about. The host stamps the
-  session cwd as the default; pass `scope` (one of the session's
+- **Scope** — the absolute directory a row is about. The host stamps the
+  session cwd (request `cwd`) as the default; pass `scope` (one of the session's
   "Memory scopes here" candidates) when the row is about another
   directory; `global: true` when it is about the person. Core has none.
-- **Hook** — one line, ≤ 80 chars, what the row is for. Expected on
-  `preference` and `decision` rows; the index shows it.
-- **`indexed`** — the hook loads at every session start under the
-  row's scope. For standing rules the user states; the dream only
-  proposes it (review item `index`).
+- **`indexed`** — the row loads at every session start under its
+  scope. For standing rules the user states; the dream also sets or
+  clears it on its own when sure.
+- **Summary** — one line, ≤ 80 chars, what the row is for. Matters only
+  on indexed rows: the index shows it, or the content's opening when
+  there is none.
 
 ## Outcome field — only for action-flavored types
 

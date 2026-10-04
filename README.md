@@ -77,11 +77,11 @@ Rows are separated by how durable they have proven to be, and the nightly pass i
 # Add a standing rule, about this repo, in its index
 ling-mem add "prefers concise replies, no hedging" \
   --type preference --from user --tier semantic \
-  --hook "concise replies, no hedging" --indexed
+  --summary "concise replies, no hedging" --indexed
 
 # Semantic search, scoped to a project
 ling-mem search "how do I format logs in dev" \
-  --cwd-scope ~/workspace/linggen --limit 5
+  --scope-root ~/workspace/linggen --limit 5
 
 # Browse by filter
 ling-mem list --type preference --since 2026-01-01 --format text
