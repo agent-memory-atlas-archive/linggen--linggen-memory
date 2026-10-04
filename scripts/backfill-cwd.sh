@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backfill `cwd` onto rows written before the field was stamped.
+# Backfill `scope` (a session's cwd) onto rows written before it was stamped.
 #
 # The join key is already on the row: `source_session`. A Claude Code session
 # log records its own cwd per entry; a Linggen session records it in
@@ -52,7 +52,7 @@ ling-mem --episodic export - > "$work/epi.ndjson" 2>/dev/null
 for table in sem epi; do
   epi_flag=false
   [ "$table" = "epi" ] && epi_flag=true
-  jq -r 'select((.cwd // "") == "" and (.source_session // "") != "")
+  jq -r 'select(((.scope // .cwd) // "") == "" and (.source_session // "") != "")
          | "\(.id)\t\(.source_session)"' "$work/$table.ndjson" 2>/dev/null \
   | awk -v FS='\t' -v OFS='\t' -v epi="$epi_flag" -v home="$HOME" '
       NR == FNR { seen[$1] = $2; next }
@@ -72,7 +72,7 @@ done
 
 resolvable="$(wc -l < "$work/todo.tsv" | tr -d ' ')"
 needed="$(cat "$work/sem.ndjson" "$work/epi.ndjson" \
-          | jq -r 'select((.cwd // "") == "") | .id' 2>/dev/null | wc -l | tr -d ' ')"
+          | jq -r 'select(((.scope // .cwd) // "") == "") | .id' 2>/dev/null | wc -l | tr -d ' ')"
 
 echo "rows without cwd: $needed"
 echo "resolvable:       $resolvable"
@@ -94,7 +94,7 @@ while IFS=$'\t' read -r id cwd epi; do
   code="$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/api/memory/update" \
     -H 'content-type: application/json' \
     -d "$(jq -nc --arg i "$id" --arg c "$cwd" --argjson e "$epi" \
-            '{id:$i, cwd:$c, episodic:$e}')")"
+            '{id:$i, scope:$c, episodic:$e}')")"
   if [ "$code" = "200" ]; then
     filled=$((filled + 1))
     [ $((filled % 50)) -eq 0 ] && echo "  … $filled"

@@ -124,12 +124,8 @@ let uiView = 'browse';
 function switchUiView(name) {
   uiView = name;
   document.body.classList.toggle('view-calendar', name === 'calendar');
-  document.body.classList.toggle('view-scope', name === 'scope');
   const cal = document.getElementById('calendar-view');
   if (cal) cal.hidden = name !== 'calendar';
-  const scopeEl = document.getElementById('scope-view');
-  if (scopeEl) scopeEl.hidden = name !== 'scope';
-  if (name === 'scope') renderScopeView().catch(() => {});
   for (const btn of document.querySelectorAll('#main-nav button[data-nav]')) {
     const active = btn.dataset.nav === name;
     btn.classList.toggle('active', active);
@@ -534,12 +530,12 @@ const state = {
 function blankFact() {
   return {
     content: '',
-    hook: null,
+    summary: null,
     indexed: false,
     type: 'fact',
     from: 'user',
     outcome: null,
-    cwd: null,
+    scope: null,
     occurred_at: null,
   };
 }
@@ -547,13 +543,13 @@ function blankFact() {
 function cloneDraft(fact) {
   return {
     content: fact.content ?? '',
-    hook: fact.hook ?? null,
+    summary: fact.summary ?? null,
     indexed: fact.indexed === true,
     type: fact.type ?? 'fact',
     tier: fact.tier ?? 'semantic',
     from: fact.from ?? 'derived',
     outcome: fact.outcome ?? null,
-    cwd: fact.cwd ?? null,
+    scope: fact.scope ?? null,
     occurred_at: fact.occurred_at ?? null,
   };
 }
@@ -630,7 +626,7 @@ function filterPayload() {
   const f = state.filters;
   const body = {};
   if (f.apps.length > 0) body.apps = f.apps;
-  if (f.scope)   body.cwd_scope = f.scope;
+  if (f.scope)   body.scope_root = f.scope;
   if (f.indexed !== null) body.indexed = f.indexed;
   if (f.type)    body.type = f.type;
   if (f.from)    body.from = f.from;
@@ -747,7 +743,7 @@ const HOST_LABELS = {
 function hostLabel(row) {
   if (!row) return '—';
   if (row.host) return HOST_LABELS[row.host] ?? row.host;
-  const cwd = row.cwd || '';
+  const cwd = row.scope || '';
   if (cwd.includes('/.claude/'))   return 'Claude Code';
   if (cwd.includes('/.codex/'))    return 'Codex';
   if (cwd.includes('/.openclaw/')) return 'OpenClaw';
@@ -1079,7 +1075,7 @@ function renderRowHead(fact) {
     const h = document.createElement('span');
     h.className = 'row-host';
     h.textContent = host;
-    h.title = `inferred host (from cwd: ${fact.cwd || ''})`;
+    h.title = `inferred host (from scope: ${fact.scope || ''})`;
     head.appendChild(h);
   }
 
@@ -1103,12 +1099,12 @@ function renderRowContent(content) {
 }
 
 function renderRowMeta(fact) {
-  if (!fact.cwd && !fact.hook && !fact.indexed) return null;
+  if (!fact.scope && !fact.summary && !fact.indexed) return null;
   const meta = document.createElement('div');
   meta.className = 'row-meta';
   if (fact.indexed) meta.appendChild(chip('indexed', 'chip indexed'));
-  if (fact.cwd) meta.appendChild(chip(shortPath(fact.cwd), 'chip'));
-  if (fact.hook) meta.appendChild(chip(fact.hook, 'chip tag'));
+  if (fact.scope) meta.appendChild(chip(shortPath(fact.scope), 'chip'));
+  if (fact.summary) meta.appendChild(chip(fact.summary, 'chip tag'));
   return meta;
 }
 
@@ -1228,9 +1224,9 @@ function detailGrid() {
   grid.className = 'detail-grid';
   const edited = state.draft.edited;
   const rows = [
-    ['Hook',      clearableInput('hook', 'one line, ≤ 80 chars — what the row is for')],
+    ['Summary',   clearableInput('summary', 'one line, ≤ 80 chars — what the index shows')],
     ['Indexed',   indexedToggle()],
-    ['Scope',     clearableInput('cwd', 'the directory it is about — empty = the person')],
+    ['Scope',     clearableInput('scope', 'the directory it is about — empty = the person')],
     ['Type',      enumSelect('type', FACT_TYPE_LIST)],
     ['From',      enumSelect('from', ORIGIN_LIST)],
     ['Outcome',   nullableSelect('outcome', OUTCOME_LIST)],
@@ -1274,7 +1270,7 @@ function factForSelected() {
 
 // ── Field controls ────────────────────────────────────────────────────────
 
-// The index flag: a row in its scope's index loads its hook at every
+// The index flag: a row in its scope's index loads its summary at every
 // session start in that directory or below.
 function indexedToggle() {
   const label = document.createElement('label');
@@ -1457,12 +1453,14 @@ function isEpisodicMode() {
 
 function buildAddPayload(e) {
   const body = { content: e.content };
-  if (e.hook)    body.hook = e.hook;
+  if (e.summary) body.summary = e.summary;
   if (e.indexed) body.indexed = true;
   body.type = e.type;
   body.from = e.from;
   if (e.outcome) body.outcome = e.outcome;
-  if (e.cwd)     body.cwd = e.cwd;
+  // A new row's scope rides as the request's cwd: the daemon stores it
+  // as the scope when it is a directory that can hold rows.
+  if (e.scope)   body.cwd = e.scope;
   if (e.occurred_at) body.occurred_at = normalizeDate(e.occurred_at);
   // The view names the tier: core, episodic, or long-term for All and
   // Semantic (an add with no tier would land episodic).
@@ -1505,7 +1503,7 @@ function diffForUpdate(original, edited) {
     patch.content = edited.content;
     dirty = true;
   }
-  const hk = nullablePatch(original.hook, edited.hook, 'hook', 'clear_hook');
+  const hk = nullablePatch(original.summary, edited.summary, 'summary', 'clear_summary');
   if (hk) { Object.assign(patch, hk); dirty = true; }
   if (edited.indexed !== original.indexed) {
     patch.indexed = edited.indexed;
@@ -1525,7 +1523,7 @@ function diffForUpdate(original, edited) {
   }
   const oc = nullablePatch(original.outcome, edited.outcome, 'outcome', 'clear_outcome');
   if (oc) { Object.assign(patch, oc); dirty = true; }
-  const cw = nullablePatch(original.cwd, edited.cwd, 'cwd', 'clear_cwd');
+  const cw = nullablePatch(original.scope, edited.scope, 'scope', 'clear_scope');
   if (cw) { Object.assign(patch, cw); dirty = true; }
   return dirty ? patch : null;
 }
@@ -2422,236 +2420,6 @@ document.getElementById('view-tabs').addEventListener('click', (e) => {
   if (session) state.filters.source_session = session;
   const tier = sp.get('tier');
   if (tier && ['core', 'semantic', 'episodic'].includes(tier)) state.view = tier;
-  // `?view=scope` opens the Scope review straight away (the deep link the
-  // migration hands the person).
-  if (sp.get('view') === 'scope') queueMicrotask(() => switchUiView('scope'));
-}
-
-// ── Scope review (the scope migration, as proposals) ────────────────────
-//
-// `POST /api/migration/scope/review` backs the store up and proposes, per
-// row: a scope (cwd) move, a hook, an index flag. Nothing in the store
-// changes until a row is accepted here; "Apply schema step" — a separate
-// accept — drops the old contexts/tags columns. Edits in a row's inputs ride
-// its accept.
-
-const scopeReview = { data: null, filter: 'pending', armed: null, error: null };
-
-const SCOPE_FILTERS = [
-  ['pending', 'Pending', (p) => p.status === 'pending'],
-  ['moves', 'Scope moves', (p) => p.status === 'pending' && p.cwd_change],
-  ['hooks', 'Hooks', (p) => p.status === 'pending' && p.proposed_hook],
-  ['index', 'Index', (p) => p.status === 'pending' && p.proposed_indexed === true],
-  ['accepted', 'Accepted', (p) => p.status === 'accepted'],
-  ['skipped', 'Skipped', (p) => p.status === 'skipped'],
-  ['all', 'All', () => true],
-];
-
-async function renderScopeView({ refresh = false } = {}) {
-  const el = document.getElementById('scope-view');
-  if (!el) return;
-  if (!scopeReview.data || refresh) {
-    el.replaceChildren(scopeNote(refresh ? 'Backing up and recomputing…' : 'Loading the review…'));
-    try {
-      scopeReview.data = await api('/api/migration/scope/review', { refresh });
-      scopeReview.error = null;
-    } catch (err) {
-      scopeReview.error = err.message;
-    }
-  }
-  el.replaceChildren(scopeHeader(), scopeFilterBar(), scopeList());
-}
-
-function scopeNote(text, cls = 'scope-note') {
-  const p = document.createElement('p');
-  p.className = cls;
-  p.textContent = text;
-  return p;
-}
-
-function scopeHeader() {
-  const d = scopeReview.data;
-  const head = document.createElement('div');
-  head.className = 'scope-head';
-  const h = document.createElement('h2');
-  h.textContent = 'Scope review';
-  head.appendChild(h);
-  head.appendChild(scopeNote(
-    'Each row: where it is filed now → where it should be, a one-line hook, and whether it joins its directory\'s index. ' +
-    'Nothing in the store changes until you accept.'));
-  if (scopeReview.error) head.appendChild(scopeNote(scopeReview.error, 'scope-error'));
-  if (!d) return head;
-  const c = d.counts;
-  head.appendChild(scopeNote(
-    `${c.total} proposals · ${c.pending} pending · ${c.accepted} accepted · ${c.skipped} skipped — ` +
-    `${c.scope_moves} scope moves, ${c.hooks} hooks (${c.model_hooks} model-written), ${c.index} index`));
-  head.appendChild(scopeNote(`Backup: ${d.backup_dir ?? '—'}`, 'scope-note dim'));
-  const bar = document.createElement('div');
-  bar.className = 'scope-actions';
-  bar.append(
-    scopeButton('Accept all pending', 'accept-all', acceptAllScope, c.pending === 0),
-    scopeButton('Recompute (new backup)', 'refresh', () => renderScopeView({ refresh: true }), false),
-    scopeButton(
-      d.schema_pending ? 'Apply schema step (drop contexts/tags)' : 'Schema step applied',
-      'schema', applyScopeSchema, !d.schema_pending),
-  );
-  head.appendChild(bar);
-  return head;
-}
-
-// Two clicks for anything store-wide: the first arms the button, the second
-// (within 4 s) runs it. Native confirm() is a no-op in the app shell.
-function scopeButton(label, key, run, disabled) {
-  const b = document.createElement('button');
-  b.type = 'button';
-  b.disabled = disabled;
-  const armable = key === 'accept-all' || key === 'schema';
-  b.textContent = scopeReview.armed === key ? `Click again: ${label}` : label;
-  if (scopeReview.armed === key) b.classList.add('armed');
-  b.addEventListener('click', async () => {
-    if (armable && scopeReview.armed !== key) {
-      scopeReview.armed = key;
-      renderScopeView();
-      setTimeout(() => {
-        if (scopeReview.armed === key) { scopeReview.armed = null; renderScopeView(); }
-      }, 4000);
-      return;
-    }
-    scopeReview.armed = null;
-    b.disabled = true;
-    await run();
-  });
-  return b;
-}
-
-function scopeFilterBar() {
-  const bar = document.createElement('div');
-  bar.className = 'scope-filters';
-  const props = scopeReview.data?.proposals ?? [];
-  for (const [key, label, pred] of SCOPE_FILTERS) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = scopeReview.filter === key ? 'active' : '';
-    b.textContent = `${label} (${props.filter(pred).length})`;
-    b.addEventListener('click', () => { scopeReview.filter = key; renderScopeView(); });
-    bar.appendChild(b);
-  }
-  return bar;
-}
-
-function scopeList() {
-  const list = document.createElement('div');
-  list.className = 'scope-list';
-  const pred = SCOPE_FILTERS.find(([k]) => k === scopeReview.filter)?.[2] ?? (() => true);
-  const rows = (scopeReview.data?.proposals ?? []).filter(pred);
-  if (rows.length === 0) list.appendChild(scopeNote('Nothing here.', 'scope-note dim'));
-  for (const p of rows.slice(0, 400)) list.appendChild(scopeRow(p));
-  if (rows.length > 400) list.appendChild(scopeNote(`${rows.length - 400} more — accept some to see them.`, 'scope-note dim'));
-  return list;
-}
-
-function scopeRow(p) {
-  const card = document.createElement('div');
-  card.className = `scope-row status-${p.status}`;
-  const content = document.createElement('div');
-  content.className = 'scope-content';
-  content.textContent = p.content;
-  content.title = p.content;
-  const meta = document.createElement('div');
-  meta.className = 'scope-meta';
-  meta.textContent = `${p.type} · from=${p.from} · ${p.tier} · ${p.id}` +
-    (p.contexts?.length ? ` · contexts: ${p.contexts.join(', ')}` : '');
-  const why = document.createElement('div');
-  why.className = 'scope-why';
-  why.textContent = p.reasons.join(' · ');
-  const grid = document.createElement('div');
-  grid.className = 'scope-grid';
-  const cwdIn = scopeInput(p.cwd_change ? (p.proposed_cwd ?? '') : (p.current_cwd ?? ''), 'empty = about the person');
-  const hookIn = scopeInput(p.proposed_hook ?? '', p.proposed_hook == null ? '(keeps its hook)' : 'one line, ≤ 80 chars');
-  hookIn.disabled = p.proposed_hook == null;
-  const idx = document.createElement('input');
-  idx.type = 'checkbox';
-  idx.checked = p.proposed_indexed === true;
-  grid.append(
-    scopeLabel('Scope'), scopeCell(`${shortPath(p.current_cwd) || '(person)'} →`, cwdIn, p.cwd_change),
-    scopeLabel(`Hook${p.hook_source ? ` (${p.hook_source})` : ''}`), hookIn,
-    scopeLabel('Index'), idx,
-  );
-  const actions = document.createElement('div');
-  actions.className = 'scope-row-actions';
-  if (p.status === 'pending') {
-    const acc = document.createElement('button');
-    acc.type = 'button';
-    acc.className = 'btn-primary';
-    acc.textContent = 'Accept';
-    acc.addEventListener('click', () => acceptScopeRow(p, cwdIn.value, hookIn.value, idx.checked));
-    const sk = document.createElement('button');
-    sk.type = 'button';
-    sk.textContent = 'Skip';
-    sk.addEventListener('click', () => skipScopeRow(p));
-    actions.append(acc, sk);
-  } else {
-    actions.appendChild(scopeNote(p.status, 'scope-status'));
-  }
-  card.append(content, meta, why, grid, actions);
-  return card;
-}
-
-function scopeLabel(text) {
-  const l = document.createElement('span');
-  l.className = 'scope-label';
-  l.textContent = text;
-  return l;
-}
-
-function scopeCell(prefix, input, changed) {
-  const w = document.createElement('div');
-  w.className = changed ? 'scope-cell changed' : 'scope-cell';
-  const pre = document.createElement('span');
-  pre.className = 'scope-from';
-  pre.textContent = prefix;
-  w.append(pre, input);
-  return w;
-}
-
-function scopeInput(value, placeholder) {
-  const i = document.createElement('input');
-  i.type = 'text';
-  i.value = value;
-  i.placeholder = placeholder;
-  return i;
-}
-
-async function acceptScopeRow(p, cwd, hook, indexed) {
-  const item = { id: p.id };
-  const proposedCwd = p.cwd_change ? (p.proposed_cwd ?? '') : (p.current_cwd ?? '');
-  if (cwd.trim() !== proposedCwd) item.cwd = cwd.trim();
-  if (p.proposed_hook != null && hook.trim() !== p.proposed_hook) item.hook = hook.trim();
-  if (indexed !== (p.proposed_indexed === true)) item.indexed = indexed;
-  await scopeCall('/api/migration/scope/accept', { items: [item] });
-}
-
-async function skipScopeRow(p) {
-  await scopeCall('/api/migration/scope/skip', { ids: [p.id] });
-}
-
-async function acceptAllScope() {
-  await scopeCall('/api/migration/scope/accept', { all: true });
-}
-
-async function applyScopeSchema() {
-  await scopeCall('/api/migration/scope/apply_schema', { confirm: true });
-}
-
-async function scopeCall(path, body) {
-  try {
-    await api(path, body);
-    scopeReview.data = await api('/api/migration/scope/review', {});
-    scopeReview.error = null;
-  } catch (err) {
-    scopeReview.error = err.message;
-  }
-  renderScopeView();
 }
 
 pollHealth();

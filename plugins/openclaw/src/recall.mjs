@@ -117,7 +117,7 @@ export async function buildRecallContext({ client, prompt, cwd, settings } = {})
   // was already the wrong N.
   const scope = scopeOf(cwd);
   const args = { query: prompt, limit };
-  if (scope) args.cwd_scope = scope;
+  if (scope) args.scope_root = scope;
 
   const rows = await mcpCall(client, "memory_search", args, recallTimeoutMs);
   if (rows === null) return "";

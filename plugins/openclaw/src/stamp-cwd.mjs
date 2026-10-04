@@ -3,7 +3,7 @@
 //
 //   memory_add           cwd (the row's default scope), root (what a model's
 //                        `scope` resolves against), source_session, host
-//   memory_search        cwd_scope = root, inside a project only
+//   memory_search        scope_root = root, inside a project only
 //   memory_session_start cwd, root
 //
 // The host knows where the session is working; the model does not. Claude
@@ -66,7 +66,7 @@ export function stampCwd({ toolName, params, cwd, sessionId, settings } = {}) {
     // A search the model makes itself is scoped only inside a project; at
     // $HOME it is a deliberate whole-store lookup. Per-turn recall is the one
     // that narrows those sessions to rows about the person.
-    if (isProjectDir(root)) fill("cwd_scope", root);
+    if (isProjectDir(root)) fill("scope_root", root);
   } else {
     fill("cwd", cwd);
     fill("root", root);

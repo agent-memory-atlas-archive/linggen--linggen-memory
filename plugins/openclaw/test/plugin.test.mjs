@@ -60,7 +60,7 @@ test("stampCwd stamps by verb and ignores other tools", () => {
   );
   assert.deepEqual(
     stampCwd({ ...base, toolName: "ling-mem__memory_search", params: { query: "q" } }),
-    { query: "q", cwd_scope: "/nonexistent/repo" },
+    { query: "q", scope_root: "/nonexistent/repo" },
   );
   assert.deepEqual(
     stampCwd({ ...base, toolName: "ling-mem__memory_session_start", params: {} }),

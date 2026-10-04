@@ -59,7 +59,7 @@ if [ -n "$cwd" ] && command -v memory_root >/dev/null 2>&1; then
 fi
 search_args="$(jq -nc --arg q "$prompt" --argjson l "$limit" --arg c "$scope" '
   {query:$q, limit:$l}
-  + (if ($c | length) > 0 then {cwd_scope: $c} else {} end)
+  + (if ($c | length) > 0 then {scope_root: $c} else {} end)
 ')"
 out="$(mcp_call memory_search "$search_args" "$to")"
 
