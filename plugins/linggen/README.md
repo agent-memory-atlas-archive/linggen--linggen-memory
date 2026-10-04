@@ -26,7 +26,7 @@ install it yourself: `curl -fsSL https://linggen.dev/install.sh | bash`.
 Session start connects **two** MCP servers — `linggen`
 (`http://127.0.0.1:9527/mcp`: browser, x, agents) and `ling-mem`
 (`http://127.0.0.1:9528/mcp`: memory) — boots both daemons, and injects
-your core memory (who you are) into context; preferences come back through per-turn recall.
+your core memory (who you are) into context, plus — in a project — the directories a memory can be filed under and the index of standing rules filed for that directory and its parents; everything else comes back through per-turn recall, scoped to where you work.
 
 Each tool is served in exactly one place. Memory comes from the memory
 daemon, so a machine that only wants memory needs only that one; the

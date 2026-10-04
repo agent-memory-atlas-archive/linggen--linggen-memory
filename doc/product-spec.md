@@ -40,23 +40,22 @@ Every row has a `tier` that sets how durable it is and when it loads:
 | Tier | What | Lifecycle |
 |:--|:--|:--|
 | **core** | Narrow universals about the person — name, role, location, timezone, languages, family / pets | Always loaded into the prompt at session start. Kept tight. |
-| **semantic** (default) | Everything else durable — long-term goals, cross-project preferences, decisions and their reasoning, tech gotchas | Retrieved on demand by similarity. |
-| **episodic** | Per-turn working capture — append anything that *might* matter, no search-first | Separate staging table. The **dream** pass promotes worthy rows to core/semantic and evicts the rest past a TTL. |
+| **semantic** | Everything else durable — long-term goals, cross-project preferences, decisions and their reasoning, tech gotchas | Retrieved on demand by similarity. |
+| **episodic** (default) | Per-turn working capture — append anything that *might* matter, no search-first | Separate staging table. The **dream** pass promotes worthy rows to core/semantic and evicts the rest past a TTL. |
 
 The `dream` mission is the consolidation pass: it dedupes episodic capture, promotes what earns a place, and lets the rest expire. It replaced the old every-N-turns encoder subagent.
 
 ## Shape of a fact
 
-Twelve fields (see `tech-spec.md` for the wire format). The user-facing mental model:
+See `tech-spec.md` for the wire format. The user-facing mental model:
 
 - **What** — the fact text itself, self-contained (including any scoping conditions).
-- **Where it applies** — contexts (scope tags, e.g. `code/linggen`, `music/piano`).
-- **Everything else about it** — free-form tags (topic, intent, people, mood).
+- **Where it belongs** — its scope: the directory it is about (`cwd`), or none when it is about the person. A session sees rows from its directory, its parents, and about the person.
+- **Its one-line hook** — what the row is for; standing rules are **indexed**, so every session in their directory loads the hook at start.
 - **What kind of fact** — one of seven canonical types.
 - **Who said/did it** — user / agent / derived.
 - **Result if applicable** — worked / failed / neutral.
 - **When it happened** — separate from when it was added to memory.
-- **Where it was captured** — cwd at extraction time.
 - **Which session it came from** — escape hatch if the fact turns out ambiguous.
 
 ## The seven fact types
@@ -77,7 +76,7 @@ No `activity` catch-all. Weekly-status-style entries (the drift category in prio
 
 ## The three retrieval modes
 
-1. **Active injection (push).** When a session starts or a turn arrives, relevant facts are auto-attached to the prompt — scope-filtered, top-k by vector similarity. The assistant doesn't need to ask.
+1. **Active injection (push).** At session start: core, plus the index of standing rules for the directory. Each turn: relevant facts, scoped to where the session works, top-k by similarity. The assistant doesn't need to ask.
 2. **Tool (pull).** `ling-mem search <query>` — invoked by the model when it decides memory would help.
 3. **Browse (human).** The **Data Browser** webpage — filter, semantic search, edit-in-place, bulk-delete, bulk-forget. Served by the `ling-mem` daemon itself (`ling-mem serve`) from assets baked into the binary; the same origin hosts both the UI and the REST API. See `ui-spec.md`.
 
@@ -86,18 +85,19 @@ No `activity` catch-all. Weekly-status-style entries (the drift category in prio
 1. **Time-decay** — old activity-flavored facts are archived automatically after N days.
 2. **Access-decay** — facts unused in 90+ days drop in priority / archive.
 3. **Durability filter at write time** — the extraction pipeline refuses ephemeral / project-specific facts from entering.
-4. **Explicit user forget** — `ling-mem forget --context trip-japan-2026` bulk-removes when a phase of life is over.
+4. **Explicit user forget** — `ling-mem forget --type ... --older-than ...` bulk-removes by filter; single rows via `delete`.
 
 ## User-facing CLI
 
 ```bash
-ling-mem add "prefers concise replies" --type preference --from user
-ling-mem search "dock calibration" --context code/sanji --limit 5
+ling-mem add "prefers concise replies" --type preference --from user \
+  --tier semantic --hook "concise replies" --indexed
+ling-mem search "dock calibration" --cwd-scope ~/workspace/rust/sanji --limit 5
 ling-mem list --type fixed --since 2026-01-01
-ling-mem edit <id> --tags "intent:learn,topic:rust"
+ling-mem edit <id> --hook "what it is for" --cwd ~/workspace
 ling-mem archive <id>
 ling-mem delete <id>
-ling-mem forget --context code/sanji --older-than 30d
+ling-mem forget --type fixed --older-than 30d
 
 # Extraction
 ling-mem collect --since 2026-04-01

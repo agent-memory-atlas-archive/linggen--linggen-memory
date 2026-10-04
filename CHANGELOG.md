@@ -1,8 +1,59 @@
 # Changelog
 
-## [Unreleased] — session start loads core only
+## [Unreleased] — scope and index (`doc/scope-index-spec.md`)
 
-### Changed
+### Added
+
+- **A row's `cwd` is its scope** — the directory it is about; none =
+  about the person. `memory_add` takes `scope` (one of the session's
+  "Memory scopes here" candidates); the daemon accepts an existing dir
+  inside the session root or a parent of it below `$HOME`, else the
+  host-stamped cwd. Hosts stamp `cwd`, `root`, `source_session`, `host`.
+- **`hook` and `indexed`.** A one-line hook (≤ 80 chars) on preference and
+  decision rows; `indexed` rows load their hook at session start in their
+  directory and below (nearest first, 3000 chars, `## Index — <dir>`).
+- **`session_start` takes `cwd`/`root`**: core + the candidates line + the
+  index. CLI `session-start --cwd --root`.
+- **Recall scope by root**: rows under the root, at its parents, and about
+  the person; a skill's dir (`~/.linggen/skills/<name>`) sees only its own
+  rows; `$HOME`, `~/.linggen` and temp see only person rows.
+- `memory_add` advertises `from`; recall lines read
+  `From memory (<type>, from=<who>, <host>, <date>, score, id)`.
+- Review-queue kinds `index` and `scope`: the dream proposes, the person
+  confirms.
+- CLI: `add --scope --root --hook --indexed --global`, `edit --hook
+  --clear-hook --indexed`, filters `--app --indexed --source-session`.
+- Console: hook / indexed / scope in the detail pane and row chips;
+  `/app:`, `/scope:`, `/indexed:` filters.
+- Scope migration review (proposals only; the store is unchanged until
+  accepted).
+
+### Removed
+
+- **`contexts` and `tags`.** Gone from the model, MCP and CLI; a digest is
+  known by the rows whose `superseded_by` points at it. Store schema v2
+  drops the columns in a **gated** step: it runs only when the owner
+  accepts it after a backup; until then the store stays v1 (older binaries
+  still open it) and writes keep each row's old values. A phone's
+  `contexts_any` is read as app names.
+
+### Fixed
+
+- An add with no `tier` lands episodic, as the protocol says (was semantic).
+- `from` is on the `memory_add` schema.
+- One `source_session` story: host-filled everywhere; recall.sh stops
+  asking the model.
+- Merges keep the surviving row's `cwd` unless empty (the cross-tier merge
+  overwrote it); a replacement takes its losers' common scope; chains rows
+  carry `cwd`.
+- `replace_ids` keeps the loser's tier.
+- One TTL clock, `COALESCE(occurred_at, created_at)`, for list, sweep, the
+  days rollup and evict.
+- CLI forwards `--include-expired`, `--superseded-by`, `--source-session`
+  and every `--type` to the daemon.
+- Protocol text: `occurred_at` dates days and TTL; it never ranks.
+
+### Changed (earlier the same day) — session start loads core only
 
 - **Preferences no longer load at session start.** `session_start` returns
   the core rows only (`{core, block, chars}`); `cwd` and `budget_chars` are

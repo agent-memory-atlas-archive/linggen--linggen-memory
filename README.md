@@ -45,7 +45,7 @@ Both halves of the loop meet at the same store. **The day half runs anywhere the
 |---|---|---|
 | **capture** | live | Signal is saved in the turn it appears. What you state outright goes to long-term; the rest stages in short-term. |
 | **recall** | live | Relevant rows surface at the start of every turn, and anything used in a reply is cited inline. |
-| **scope** | live | Every row records the project it came from, so recall is scoped to where you are asking — plus everything that is about *you*. |
+| **scope** | live | Every row is filed under the directory it is about, so recall is scoped to where you are asking — plus everything that is about *you*. Standing rules can join that directory's **index**, which every session there loads at start. |
 | **reconcile** | live | The agent rewrites its own notes freely. What you said changes only with you, and the store refuses a silent rewrite of your voice. |
 | **dream** | nightly | Each unjudged day is reviewed one at a time. Durable rows are promoted; nothing unjudged is ever deleted. |
 | **forget** | nightly | Once a day is judged, its staging rows fade after about a week unless they were promoted. Mechanical, no model in the loop. |
@@ -74,19 +74,20 @@ Rows are separated by how durable they have proven to be, and the nightly pass i
 ## Quick look
 
 ```bash
-# Add a fact
+# Add a standing rule, about this repo, in its index
 ling-mem add "prefers concise replies, no hedging" \
-  --type preference --from user
+  --type preference --from user --tier semantic \
+  --hook "concise replies, no hedging" --indexed
 
-# Semantic search
+# Semantic search, scoped to a project
 ling-mem search "how do I format logs in dev" \
-  --context code/linggen --limit 5
+  --cwd-scope ~/workspace/linggen --limit 5
 
 # Browse by filter
 ling-mem list --type preference --since 2026-01-01 --format text
 
-# Forget a finished project
-ling-mem forget --context trip-japan-2026 --yes
+# Forget everything one session wrote
+ling-mem forget --source-session sess-123 --yes
 ```
 
 Default output is NDJSON on stdout — any model, script, or shell can parse it. Pass `--format text` for human-readable lines.

@@ -8,7 +8,7 @@ A single-binary memory layer that remembers useful facts about you and your work
 
 - **Auto-recall on every prompt.** A `UserPromptSubmit` hook runs a semantic search over your stored facts and injects the top matches as context — no manual tool call required. Relevant preferences and past decisions land in the agent's view automatically.
 - **Semantic retrieval.** 1024-dim embeddings via `Qwen3-Embedding-0.6B` (multilingual). Find "berth calibration" by asking about "dock alignment."
-- **Typed facts.** `fact`, `preference`, `decision`, `learned`, plus trajectory-level `tried`, `fixed`, `built`. Searches and filters operate on these tags.
+- **Typed facts.** `fact`, `preference`, `decision`, `learned`, plus trajectory-level `tried`, `fixed`, `built`. Searches and filters operate on these types.
 - **Forgetting is first-class.** Delete by id, forget by filter — refuses empty filters as a guardrail.
 - **Local-first storage.** The memory store is on disk in `~/.linggen/memory/` (LanceDB) — no cloud sync, no telemetry. Retrieved facts do enter your agent's prompt context on each turn, so they reach whichever LLM you've configured.
 - **Self-updating.** `ling-mem upgrade --check` reports the latest release; `--yes` swaps the binary atomically. (`self-update` still works as an alias.)
