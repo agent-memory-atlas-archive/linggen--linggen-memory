@@ -76,7 +76,14 @@ host offers candidates and the model picks.
   directory only, no person rows — today's app isolation, keyed by path
   instead of `contexts`. `is_project_dir` stops rejecting
   `~/.linggen/skills/*`; `~/.linggen` itself and `$HOME` stay non-scopes.
-- **No root** (`$HOME`, `~/.linggen`, temp): rows with no cwd only.
+- **No root** (`$HOME`, `~/.linggen`, temp — Yinyue, a plain chat): rows with
+  no cwd, plus at most 2 rows filed under a directory when they match the
+  question strongly (cosine ≥ `no_root_project_min_score`, default 0.70 —
+  chosen from live queries 2026-10-04: small talk peaked at 0.68, on-topic
+  project questions reached 0.71–0.79). `preference` rows with a cwd never
+  qualify: dev and project rules must not ride into everyday chat; facts and
+  decisions about the work can. Applied in the daemon's search, so every host
+  gets the same rule. (Approved by Hanli 2026-10-04.)
 
 ## Index loading
 

@@ -16,7 +16,9 @@
   index. CLI `session-start --cwd --root`.
 - **Recall scope by root**: rows under the root, at its parents, and about
   the person; a skill's dir (`~/.linggen/skills/<name>`) sees only its own
-  rows; `$HOME`, `~/.linggen` and temp see only person rows.
+  rows; `$HOME`, `~/.linggen` and temp see person rows plus at most two
+  strong project matches (cosine ≥ `no_root_project_min_score`, 0.70; never
+  preferences).
 - `memory_add` advertises `from`; recall lines read
   `From memory (<type>, from=<who>, <host>, <date>, score, id)`.
 - Review-queue kinds `index` and `scope`: the dream proposes, the person

@@ -262,7 +262,9 @@ hosts only hand the daemon paths.
 - **Recall scope** (`cwd_scope` = root), applied in SQL before ranking:
   an owner root sees rows under it (any depth), rows at its parents and
   rows with no `cwd`; a skill's dir sees only rows under it; `$HOME`,
-  `~/.linggen` and temp dirs see only rows with no `cwd`. While a store
+  `~/.linggen` and temp dirs see rows with no `cwd`, plus at most two rows
+  filed under a directory whose cosine reaches `no_root_project_min_score`
+  (config, default 0.70; never `preference` rows). While a store
   still has the v1 `contexts` column, a skill scope also matches rows
   tagged with the skill's name.
 - **Writing**: `memory_add` takes the model's `scope` (a candidate from

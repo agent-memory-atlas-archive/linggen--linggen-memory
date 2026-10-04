@@ -32,7 +32,8 @@ const RECONCILE_NOTE =
  * The recall scope for a session at `cwd`: its root (see `memoryRoot`), which
  * the daemon reads — a project root sees rows under it, at its parents and
  * about the person; a skill's dir only its own rows; `$HOME`, `~/.linggen`
- * and temp dirs only rows about the person. "" when there is no cwd.
+ * and temp dirs rows about the person plus at most two strong
+ * non-preference matches filed under a directory. "" when there is no cwd.
  */
 export function scopeOf(cwd) {
   return memoryRoot(cwd);

@@ -47,7 +47,8 @@ min_score="${LING_MEM_RECALL_MIN_SCORE:-0}"
 # Scope the search to where this session stands, as its root (git root, or
 # where the session started): rows under it, rows at its parents, and rows
 # about the person. A skill's own dir sees only its rows; $HOME, ~/.linggen
-# and temp dirs see only rows about the person. The daemon applies it BEFORE
+# and temp dirs see rows about the person plus at most two strong
+# non-preference matches filed under a directory. The daemon applies it BEFORE
 # ranking — a filter applied afterwards can only shrink a list that was
 # already the wrong N — and owns the rules (ling-mem doc/scope-index-spec.md).
 # shellcheck source=./scope.sh
