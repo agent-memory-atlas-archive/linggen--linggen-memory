@@ -1184,3 +1184,7 @@ body.view-calendar #calendar-view { display: flex; }
 }
 .rq-dismiss:hover { color: var(--err); border-color: var(--err); }
 .rq-dismiss:disabled { opacity: 0.5; cursor: default; }
+
+/* ── Scope pair (hook / indexed) ─────────────────────────────────────── */
+.chip.indexed { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.indexed-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--text-dim); font-size: 13px; }

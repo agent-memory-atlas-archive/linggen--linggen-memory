@@ -406,7 +406,9 @@ async function renderCalendarView() {
 function parseQuery(raw) {
   const text = [];
   const picked = {
-    contexts: [],
+    apps: [],
+    scope: null,
+    indexed: null,
     type: null,
     from: null,
     outcome: null,
@@ -426,8 +428,16 @@ function parseQuery(raw) {
 
 function applyFilterToken(field, value, picked) {
   switch (field) {
-    case 'context':
-      picked.contexts.push(value);
+    case 'app':
+      picked.apps.push(value);
+      return true;
+    case 'scope':
+      // A session root: rows under it, at its parents, and about the person.
+      picked.scope = value;
+      return true;
+    case 'indexed':
+      if (!['yes', 'no', 'true', 'false'].includes(value)) return false;
+      picked.indexed = value === 'yes' || value === 'true';
       return true;
     case 'type':
       if (!FACT_TYPES.has(value)) return false;
@@ -475,7 +485,9 @@ function normalizeDate(s) {
 
 const state = {
   filters: {
-    contexts: [],
+    apps: [],
+    scope: null,
+    indexed: null,
     type: null,
     from: null,
     outcome: null,
@@ -518,8 +530,8 @@ const state = {
 function blankFact() {
   return {
     content: '',
-    contexts: [],
-    tags: [],
+    hook: null,
+    indexed: false,
     type: 'fact',
     from: 'user',
     outcome: null,
@@ -531,8 +543,8 @@ function blankFact() {
 function cloneDraft(fact) {
   return {
     content: fact.content ?? '',
-    contexts: Array.isArray(fact.contexts) ? [...fact.contexts] : [],
-    tags: Array.isArray(fact.tags) ? [...fact.tags] : [],
+    hook: fact.hook ?? null,
+    indexed: fact.indexed === true,
     type: fact.type ?? 'fact',
     tier: fact.tier ?? 'semantic',
     from: fact.from ?? 'derived',
@@ -545,7 +557,9 @@ function cloneDraft(fact) {
 function hasAnyFilter() {
   const f = state.filters;
   return (
-    f.contexts.length > 0 ||
+    f.apps.length > 0 ||
+    f.scope !== null ||
+    f.indexed !== null ||
     f.type !== null ||
     f.from !== null ||
     f.outcome !== null ||
@@ -558,9 +572,11 @@ function hasAnyFilter() {
 
 function mergeFilters(picked) {
   const f = state.filters;
-  for (const c of picked.contexts) {
-    if (!f.contexts.includes(c)) f.contexts.push(c);
+  for (const a of picked.apps) {
+    if (!f.apps.includes(a)) f.apps.push(a);
   }
+  if (picked.scope !== null)   f.scope = picked.scope;
+  if (picked.indexed !== null) f.indexed = picked.indexed;
   if (picked.type !== null)    f.type = picked.type;
   if (picked.from !== null)    f.from = picked.from;
   if (picked.outcome !== null) f.outcome = picked.outcome;
@@ -571,7 +587,9 @@ function mergeFilters(picked) {
 
 function clearFilters() {
   state.filters = {
-    contexts: [],
+    apps: [],
+    scope: null,
+    indexed: null,
     type: null,
     from: null,
     outcome: null,
@@ -583,8 +601,8 @@ function clearFilters() {
 }
 
 function removeFilter(field, value) {
-  if (field === 'contexts') {
-    state.filters.contexts = state.filters.contexts.filter(c => c !== value);
+  if (field === 'apps') {
+    state.filters.apps = state.filters.apps.filter(a => a !== value);
   } else {
     state.filters[field] = null;
   }
@@ -607,7 +625,9 @@ function onQuerySubmit() {
 function filterPayload() {
   const f = state.filters;
   const body = {};
-  if (f.contexts.length > 0) body.contexts = f.contexts;
+  if (f.apps.length > 0) body.apps = f.apps;
+  if (f.scope)   body.cwd_scope = f.scope;
+  if (f.indexed !== null) body.indexed = f.indexed;
   if (f.type)    body.type = f.type;
   if (f.from)    body.from = f.from;
   if (f.outcome) body.outcome = f.outcome;
@@ -815,7 +835,9 @@ function renderFiltersBar() {
 function activeFilterChips() {
   const f = state.filters;
   const chips = [];
-  for (const c of f.contexts) chips.push(filterChip('context', c));
+  for (const a of f.apps) chips.push(filterChip('app', a));
+  if (f.scope)   chips.push(filterChip('scope', f.scope));
+  if (f.indexed !== null) chips.push(filterChip('indexed', f.indexed ? 'yes' : 'no'));
   if (f.type)    chips.push(filterChip('type', f.type));
   if (f.from)    chips.push(filterChip('from', f.from));
   if (f.outcome) chips.push(filterChip('outcome', f.outcome));
@@ -840,7 +862,7 @@ function filterChip(field, value) {
   close.setAttribute('aria-label', `remove ${field} filter`);
   close.textContent = '×';
   close.addEventListener('click', () => {
-    removeFilter(field === 'context' ? 'contexts' : field, value);
+    removeFilter(field === 'app' ? 'apps' : field, value);
     renderFiltersBar();
     reload();
   });
@@ -1077,14 +1099,20 @@ function renderRowContent(content) {
 }
 
 function renderRowMeta(fact) {
-  const contexts = Array.isArray(fact.contexts) ? fact.contexts : [];
-  const tags = Array.isArray(fact.tags) ? fact.tags.slice(0, 3) : [];
-  if (contexts.length === 0 && tags.length === 0) return null;
+  if (!fact.cwd && !fact.hook && !fact.indexed) return null;
   const meta = document.createElement('div');
   meta.className = 'row-meta';
-  for (const c of contexts) meta.appendChild(chip(c, 'chip'));
-  for (const t of tags) meta.appendChild(chip(t, 'chip tag'));
+  if (fact.indexed) meta.appendChild(chip('indexed', 'chip indexed'));
+  if (fact.cwd) meta.appendChild(chip(shortPath(fact.cwd), 'chip'));
+  if (fact.hook) meta.appendChild(chip(fact.hook, 'chip tag'));
   return meta;
+}
+
+// A scope as people read it: `~/…` under home, the path otherwise. The
+// console doesn't know $HOME, so it trims the common `/Users/<name>` /
+// `/home/<name>` prefix.
+function shortPath(p) {
+  return String(p ?? '').replace(/^\/(Users|home)\/[^/]+/, '~');
 }
 
 function chip(text, className) {
@@ -1196,12 +1224,12 @@ function detailGrid() {
   grid.className = 'detail-grid';
   const edited = state.draft.edited;
   const rows = [
-    ['Contexts',  chipEditor('contexts', 'add context…')],
-    ['Tags',      chipEditor('tags', 'topic:ui, intent:learn, …')],
+    ['Hook',      clearableInput('hook', 'one line, ≤ 80 chars — what the row is for')],
+    ['Indexed',   indexedToggle()],
+    ['Scope',     clearableInput('cwd', 'the directory it is about — empty = the person')],
     ['Type',      enumSelect('type', FACT_TYPE_LIST)],
     ['From',      enumSelect('from', ORIGIN_LIST)],
     ['Outcome',   nullableSelect('outcome', OUTCOME_LIST)],
-    ['cwd',       clearableInput('cwd', '/path/to/workdir')],
   ];
 
   if (state.draft.kind === 'new') {
@@ -1242,77 +1270,20 @@ function factForSelected() {
 
 // ── Field controls ────────────────────────────────────────────────────────
 
-function chipEditor(field, placeholder) {
-  const wrap = document.createElement('div');
-  wrap.className = 'chip-editor';
-  const values = state.draft.edited[field];
-
-  for (const [i, v] of values.entries()) {
-    wrap.appendChild(chipEditorItem(field, v, i));
-  }
-
-  const input = document.createElement('input');
-  input.type = 'text';
-  input.placeholder = placeholder;
-  input.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' || e.key === ',') {
-      e.preventDefault();
-      commitChip(field, input.value);
-      input.value = '';
-    } else if (e.key === 'Backspace' && input.value === '' && values.length > 0) {
-      removeChip(field, values.length - 1);
-    }
+// The index flag: a row in its scope's index loads its hook at every
+// session start in that directory or below.
+function indexedToggle() {
+  const label = document.createElement('label');
+  label.className = 'indexed-toggle';
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.checked = state.draft.edited.indexed === true;
+  box.addEventListener('change', () => {
+    state.draft.edited.indexed = box.checked;
+    renderActionsOnly();
   });
-  input.addEventListener('blur', () => {
-    if (input.value.trim() !== '') {
-      commitChip(field, input.value);
-      input.value = '';
-    }
-  });
-  wrap.appendChild(input);
-  return wrap;
-}
-
-function chipEditorItem(field, value, idx) {
-  const chipEl = document.createElement('span');
-  chipEl.className = field === 'tags' ? 'editable-chip tag' : 'editable-chip';
-  chipEl.appendChild(document.createTextNode(value));
-  const close = document.createElement('button');
-  close.type = 'button';
-  close.textContent = '×';
-  close.setAttribute('aria-label', `remove ${field.slice(0, -1)}`);
-  close.addEventListener('click', () => removeChip(field, idx));
-  chipEl.appendChild(close);
-  return chipEl;
-}
-
-function commitChip(field, raw) {
-  const v = raw.trim();
-  if (!v) return;
-  const values = state.draft.edited[field];
-  if (values.includes(v)) return;
-  values.push(v);
-  renderDetail();
-  focusChipInput(field);
-}
-
-function removeChip(field, idx) {
-  state.draft.edited[field].splice(idx, 1);
-  renderDetail();
-  focusChipInput(field);
-}
-
-function focusChipInput(field) {
-  requestAnimationFrame(() => {
-    const label = field === 'contexts' ? 'Contexts' : 'Tags';
-    const dts = document.querySelectorAll('.detail-grid dt');
-    for (const dt of dts) {
-      if (dt.textContent === label) {
-        dt.nextElementSibling?.querySelector('input')?.focus();
-        return;
-      }
-    }
-  });
+  label.append(box, document.createTextNode(' in its scope\'s index'));
+  return label;
 }
 
 const FACT_TYPE_LIST = ['fact', 'preference', 'decision', 'tried', 'fixed', 'learned', 'built'];
@@ -1482,18 +1453,18 @@ function isEpisodicMode() {
 
 function buildAddPayload(e) {
   const body = { content: e.content };
-  if (e.contexts.length > 0) body.contexts = e.contexts;
-  if (e.tags.length > 0)     body.tags = e.tags;
+  if (e.hook)    body.hook = e.hook;
+  if (e.indexed) body.indexed = true;
   body.type = e.type;
   body.from = e.from;
   if (e.outcome) body.outcome = e.outcome;
   if (e.cwd)     body.cwd = e.cwd;
   if (e.occurred_at) body.occurred_at = normalizeDate(e.occurred_at);
-  // Core writes carry `tier: 'core'`; everything else stays at the
-  // semantic-table default. Episodic writes ride the top-level flag.
+  // The view names the tier: core, episodic, or long-term for All and
+  // Semantic (an add with no tier would land episodic).
   if (state.view === 'core')      body.tier = 'core';
-  if (state.view === 'semantic') body.tier = 'semantic';
-  if (isEpisodicMode())           body.episodic = true;
+  else if (isEpisodicMode())      body.episodic = true;
+  else                            body.tier = 'semantic';
   return body;
 }
 
@@ -1530,12 +1501,10 @@ function diffForUpdate(original, edited) {
     patch.content = edited.content;
     dirty = true;
   }
-  if (!arraysEqual(edited.contexts, original.contexts)) {
-    patch.contexts = edited.contexts;
-    dirty = true;
-  }
-  if (!arraysEqual(edited.tags, original.tags)) {
-    patch.tags = edited.tags;
+  const hk = nullablePatch(original.hook, edited.hook, 'hook', 'clear_hook');
+  if (hk) { Object.assign(patch, hk); dirty = true; }
+  if (edited.indexed !== original.indexed) {
+    patch.indexed = edited.indexed;
     dirty = true;
   }
   if (edited.type !== original.type) {
@@ -1561,11 +1530,6 @@ function nullablePatch(originalVal, editedVal, setKey, clearKey) {
   if (originalVal === editedVal) return null;
   if (editedVal === null || editedVal === '') return { [clearKey]: true };
   return { [setKey]: editedVal };
-}
-
-function arraysEqual(a, b) {
-  if (a.length !== b.length) return false;
-  return a.every((v, i) => v === b[i]);
 }
 
 async function saveEditedFact() {
@@ -1646,15 +1610,6 @@ function startNewFact() {
 }
 
 // ── Detail helpers (unchanged cells) ──────────────────────────────────────
-
-function chipsList(values) {
-  const arr = Array.isArray(values) ? values : [];
-  if (arr.length === 0) return dimText('—');
-  const wrap = document.createElement('div');
-  wrap.className = 'detail-chips';
-  for (const v of arr) wrap.appendChild(chip(v, 'chip'));
-  return wrap;
-}
 
 function textOrDim(value) {
   if (value === null || value === undefined || value === '') return dimText('—');
@@ -1972,7 +1927,8 @@ async function bulkForgetByFilter() {
 function describeActiveFilters() {
   const f = state.filters;
   const parts = [];
-  for (const c of f.contexts) parts.push(`context=${c}`);
+  for (const a of f.apps) parts.push(`app=${a}`);
+  if (f.indexed !== null) parts.push(`indexed=${f.indexed ? 'yes' : 'no'}`);
   if (f.type)    parts.push(`type=${f.type}`);
   if (f.from)    parts.push(`from=${f.from}`);
   if (f.outcome) parts.push(`outcome=${f.outcome}`);

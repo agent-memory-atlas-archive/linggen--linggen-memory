@@ -44,8 +44,8 @@ schema metadata key `schema_version`.
 ## Binary-declared constants
 
 ```rust
-const STORE_SCHEMA_VERSION: u32 = 1;   // version this binary writes
-const MIN_READABLE_SCHEMA:  u32 = 0;   // oldest version it can open / migrate up from
+const STORE_SCHEMA_VERSION: u32 = 2;   // version this binary writes
+const MIN_READABLE_SCHEMA:  u32 = 1;   // oldest version it can open / migrate up from
 ```
 
 ## Open-time guard (folded into `store.rs::open_named`)
@@ -85,6 +85,22 @@ which runs idempotently on every open. When `STORE_SCHEMA_VERSION` bumps, the
 step migrating the previous version must be registered in `run_migrations` —
 reaching it without one is a release bug and errors instead of stamping an
 unmigrated store.
+
+## Registered steps
+
+| From → to | What | When it runs |
+|---|---|---|
+| 1 → 2 (2026-10-04) | Drop `contexts` and `tags` (`doc/scope-index-spec.md`). `hook` + `indexed` are additive and ride `ensure_late_schema_additions`. | **Gated** — only when the owner accepts the scope migration (console review page → "Apply schema step", or `ling-mem scope-migration apply-schema`), after a backup. Never at open. |
+
+A gated step changes the open-time contract in one way: a store waiting on
+it opens normally, `run_migrations` skips the step, and the sidecar keeps the
+layout the store actually has (`stamp_layout`: `1` while any table carries the
+legacy columns, `2` once none does). Writes reshape their batches to the
+table's own schema (`schema::conform_keeping`), filling the legacy lists with
+the row's existing values, so the v1 columns stay intact for the migration to
+read. Because the sidecar stays `1` until the drop, an older binary still opens
+the store; after the drop it is refused (`TooNew`), which is the point —
+an older binary would write `contexts`/`tags` into a table that has none.
 
 ## Discipline: what a version bump means (the semver contract)
 
