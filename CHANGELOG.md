@@ -1,5 +1,16 @@
 # Changelog
 
+## [Unreleased] — session start loads core only
+
+### Changed
+
+- **Preferences no longer load at session start.** `session_start` returns
+  the core rows only (`{core, block, chars}`); `cwd` and `budget_chars` are
+  ignored, and the `session_rules_chars` config knob is gone. Preferences
+  surface by subject through per-turn recall like any other row: the recall
+  hooks (Claude Code/Codex, OpenClaw) and the Linggen engine stop passing
+  `exclude_types: ["preference"]`.
+
 ## [1.9.0] - 2026-09-25 — standing rules load at session start
 
 ### Added

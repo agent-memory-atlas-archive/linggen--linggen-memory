@@ -1,4 +1,4 @@
-// Always-on core identity + standing rules — the OpenClaw port of the core-memory block that
+// Always-on core identity — the OpenClaw port of the core-memory block that
 // `plugins/linggen/hooks/autostart.sh` emits as `additionalContext` on
 // SessionStart.
 //
@@ -13,21 +13,18 @@
 import { mcpCall } from "./rpc.mjs";
 
 /**
- * Build the session-start block — core identity plus the standing rules that
- * apply at `cwd` — or "" when the store is empty (a fresh install gets a
- * normal session with no injected block).
+ * Build the session-start block — core identity — or "" when the store is
+ * empty (a fresh install gets a normal session with no injected block).
  *
- * One `memory_session_start` call: the daemon picks the rules (type=preference,
- * global or written at this project or a parent of it), applies the char
- * budget and renders the block, so every host injects the same text. A cwd
- * that is not a project is sent anyway — the daemon loads globals only.
+ * One `memory_session_start` call: the daemon renders the block, so every host
+ * injects the same text. Preferences are not loaded here; they surface through
+ * per-turn recall like any other row.
  *
  * A slightly longer budget than a per-turn recall: this runs once per session,
  * and a cold daemon has just been asked to open LanceDB.
  */
-export async function buildCoreContext(client, timeoutMs = 5000, cwd = "") {
-  const args = cwd ? { cwd } : {};
-  const start = await mcpCall(client, "memory_session_start", args, timeoutMs);
+export async function buildCoreContext(client, timeoutMs = 5000) {
+  const start = await mcpCall(client, "memory_session_start", {}, timeoutMs);
   if (start && typeof start === "object" && !Array.isArray(start)) {
     return typeof start.block === "string" ? start.block : "";
   }

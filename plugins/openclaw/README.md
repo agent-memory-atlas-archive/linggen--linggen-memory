@@ -42,7 +42,7 @@ turns it off.
 
 | | |
 |---|---|
-| **Core identity** | Who you are — name, role, timezone, standing preferences — added to the *system* prompt once per session, so providers cache it instead of paying for it every turn. |
+| **Core identity** | Who you are — name, role, timezone — added to the *system* prompt once per session, so providers cache it instead of paying for it every turn. |
 | **Per-turn recall** | The most relevant memories for what you just asked, scoped to the project you are working in. |
 | **Project scoping** | Every `memory_add` records where it came from and every `memory_search` asks what is in scope — stamped by the host, which knows, rather than the model, which would guess. |
 | **Memory tools** | `memory_search`, `memory_add` and the rest over MCP from the local `ling-mem` daemon; browser control, X reads and `agent_run` from the Linggen engine. |

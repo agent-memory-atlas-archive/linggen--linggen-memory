@@ -123,7 +123,7 @@ If the configured model output dimension doesn't match the table's `FixedSizeLis
 | `update <id>` | Modify fields | `--content`, `--add-context`, `--remove-context`, `--add-tag`, `--remove-tag`, `--type`, `--outcome` |
 | `delete <id>` | Hard delete | `--yes` to skip confirmation |
 | `forget` | Bulk delete by filter | `--context`, `--type`, `--older-than`; requires `--yes` |
-| `session-start` | What a session loads at start: core rows + the standing rules for `--cwd` (see [Session start](#session-start)) | `--cwd`, `--budget`; text prints the block, `--format json` the payload |
+| `session-start` | What a session loads at start: the core rows (see [Session start](#session-start)) | text prints the block, `--format json` the payload |
 | *(HTTP only)* `restamp` | Move every row stamped `from` to an account (or to the owner when `account_id` is absent) | the once-only re-stamp when a signed-out phone signs in; the engine calls it, a phone may not |
 | *(HTTP only)* `accounts` | Every non-owner account with rows, with name and count | what a per-account maintenance pass iterates |
 
@@ -240,33 +240,21 @@ non-stored score columns:
   displays this; cosine moves to the badge tooltip.
 
 - `types` (list/search/count): any of these types, alongside the singular `type`
-- `exclude_types`: none of these types — per-turn recall passes `["preference"]`
+- `exclude_types`: none of these types
 - `cwd_scope`: rows at the path or BELOW it, plus rows with no `cwd` (recall)
 
 ### Session start
 
 `POST /api/memory/session_start` (MCP `memory_session_start`, CLI
-`session-start`), body `{cwd?, budget_chars?}`. Every host calls it once at
-session start and injects its `block`, so the rendering lives here, once.
+`session-start`), body `{}`. Every host calls it once at session start and
+injects its `block`, so the rendering lives here, once.
 
-- **Core**: every live `tier=core` row (cap 200).
-- **Rules**: live `type=preference` rows at tier `semantic` (core ones are
-  already in core; episodic staging never loads). A row's project is its
-  `cwd`; null = global. A session loads the global rules plus the rules at
-  its cwd **or an ancestor of it** — `cwd IS NULL OR cwd IN (<cwd and every
-  ancestor>)`, exact matches on the enumerated lineage, so a sibling that
-  shares a prefix (`…/linggen-mobile` vs `…/linggen`) never matches and a
-  rule written deeper than the session does not load. This is the opposite
-  direction of `cwd_scope` (at-or-below), which is right for recall and
-  wrong for rules. A cwd that is not a project (`$HOME`, `~/.linggen`, a temp
-  dir) or none = global rules only.
-- **Order and budget**: global first, then shallow to deep, oldest first
-  within a level. Rules load until `session_rules_chars` (config, default
-  6000) is spent; the first one that does not fit ends the loading. The
-  rest are counted in `over_budget`, listed in `over_budget_ids`, and named
-  in one line of the block — never dropped silently.
-- **Output**: `{core, rules, block, chars, over_budget, over_budget_ids,
-  project, budget_chars}`.
+- **Core only**: every live `tier=core` row (cap 200). Preferences are not
+  loaded at start (2026-10-04): they surface by subject through per-turn
+  recall, like any other long-term row.
+- **Output**: `{core, block, chars}`. A host built for 1.9.0 that still sends
+  `cwd` / `budget_chars` gets the same answer; a host that reads `rules`
+  finds none.
 - `memory_add {global: true}` stores a row with no `cwd` whatever the host
   stamped; `memory_update {global: true}` clears a row's `cwd`.
 

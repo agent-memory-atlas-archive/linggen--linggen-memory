@@ -64,11 +64,9 @@ case "$cwd" in
   "$HOME"|"$HOME/.linggen"|"$HOME/.linggen/"*) cwd="" ;;
   "${tmp%/}"|"${tmp%/}/"*|/tmp|/tmp/*|/private/tmp|/private/tmp/*) cwd="" ;;
 esac
-# Standing rules (type=preference) are loaded once at session start by
-# autostart.sh, so recall skips them: a rule re-surfacing here would only take
-# a slot from a row the session has not seen.
+# Preferences ride recall like any other row: session start loads core only.
 search_args="$(jq -nc --arg q "$prompt" --argjson l "$limit" --arg c "$cwd" '
-  {query:$q, limit:$l, exclude_types:["preference"]}
+  {query:$q, limit:$l}
   + (if ($c | length) > 0 then {cwd_scope: $c} else {} end)
 ')"
 out="$(mcp_call memory_search "$search_args" "$to")"

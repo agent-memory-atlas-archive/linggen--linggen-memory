@@ -123,9 +123,8 @@ export async function buildRecallContext({ client, prompt, cwd, sessionId, setti
   // filter applied afterwards can only shrink a list that was already the
   // wrong N.
   const scope = scopeOf(cwd);
-  // Standing rules (type=preference) are loaded once at session start, so
-  // recall skips them rather than spend a slot on a row the session has.
-  const args = { query: prompt, limit, exclude_types: ["preference"] };
+  // Preferences ride recall like any other row: session start loads core only.
+  const args = { query: prompt, limit };
   if (scope) args.cwd_scope = scope;
 
   const rows = await mcpCall(client, "memory_search", args, recallTimeoutMs);
