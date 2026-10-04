@@ -65,7 +65,13 @@ host offers candidates and the model picks.
   it into an absolute stored `scope`, resolved against the host-filled
   `cwd` and `root` (request params only). It rejects anything that is not
   an existing directory inside root or a parent of root below `$HOME`, and
-  falls back to the session cwd.
+  falls back to the session cwd. A host that cannot stamp (Codex has no
+  input rewrite) sends neither: then an absolute or `~/` scope naming an
+  existing directory that can hold rows is taken as named, and anything
+  else leaves the row unscoped.
+- MCP arguments are brought to the tool schema's types before they reach
+  the REST layer (`"false"` → `false`, `"5"` → `5`, a lone id → `[id]`): a
+  Claude Code session sent `indexed: "false"` and the add failed.
 - Examples: a 《九鼎录》 writing rule → `skills/lingjing`. A DJ lyrics lesson
   → `skills/dj`. "Commit straight to main" → `~/workspace`.
 - The dream moves a row it is sure is misfiled (`memory_update` `scope`, or
@@ -95,8 +101,9 @@ host offers candidates and the model picks.
 - Rendered under `## Index — <dir>` headings, one `- summary (id=…)` line per
   row (the content's opening when the row has no summary). The agent reads a
   row in full with `memory_get` when a line bears on the task.
-- Budget 3000 chars across all directories; the nearest directories win, and
-  a skipped count is printed.
+- Budget 3000 chars across all directories, the closing line and the
+  skipped note included; the nearest directories win, and a skipped count is
+  printed.
 - Engine: reloaded when `check_working_folder_change` fires. CC: SessionStart
   only (no cd hook); recall covers the rest.
 
