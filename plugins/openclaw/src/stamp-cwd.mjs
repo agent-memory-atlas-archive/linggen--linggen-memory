@@ -1,9 +1,13 @@
-// Stamp the project scope onto memory calls — the OpenClaw port of
-// `plugins/linggen/hooks/stamp-cwd.sh`.
+// Stamp where the session stands onto memory calls — the OpenClaw port of
+// `plugins/linggen/hooks/stamp-cwd.sh` (ling-mem doc/scope-index-spec.md):
 //
-// The host knows where the session is working; the model does not, and a model
-// guessing a scope is how rows end up labelled with an IP address. Claude Code
-// rewrites the tool input from `PreToolUse`; OpenClaw's equivalent is
+//   memory_add           cwd (the row's default scope), root (what a model's
+//                        `scope` resolves against), source_session, host
+//   memory_search        cwd_scope = root, inside a project only
+//   memory_session_start cwd, root
+//
+// The host knows where the session is working; the model does not. Claude
+// Code rewrites the tool input from `PreToolUse`; OpenClaw's equivalent is
 // `before_tool_call`, whose result may return replacement `params`.
 //
 // One difference forced by the host: OpenClaw's tool context carries no
@@ -14,7 +18,7 @@
 // because attribution could not be worked out.
 
 import { readSettings } from "./config.mjs";
-import { scopeOf } from "./recall.mjs";
+import { isProjectDir, memoryRoot } from "./scope.mjs";
 
 /**
  * Decide the rewritten params for a memory call, or null to leave it alone.
@@ -28,42 +32,45 @@ export function stampCwd({ toolName, params, cwd, sessionId, settings } = {}) {
   if ((settings ?? readSettings()).stampDisabled) return null;
   if (!toolName || !params || typeof params !== "object") return null;
 
-  // Which field this tool wants. A write records where it came from; a read
-  // asks what is in scope. Same value, opposite direction. Suffix match,
-  // because the tool arrives namespaced by server and that prefix is the
-  // user's to choose.
-  let field = "";
-  if (toolName.endsWith("memory_add")) field = "cwd";
-  else if (toolName.endsWith("memory_search")) field = "cwd_scope";
+  // Suffix match, because the tool arrives namespaced by server and that
+  // prefix is the user's to choose.
+  let verb = "";
+  if (toolName.endsWith("memory_add")) verb = "add";
+  else if (toolName.endsWith("memory_search")) verb = "search";
+  else if (toolName.endsWith("memory_session_start")) verb = "session_start";
   else return null;
 
+  const root = memoryRoot(cwd);
   const stamp = {};
+  // A field the caller set wins — the one legitimate case is a promote pass
+  // carrying the ORIGINAL row's session, cwd and host forward.
+  const fill = (field, value) => {
+    if (value && !params[field]) stamp[field] = value;
+  };
 
-  // A cwd that is not a project must never become one. Stamping `$HOME`, the
-  // engine's own `~/.linggen`, or a temp dir onto a write HIDES the row from
-  // every project search — a scope that is not a project is worse than no
-  // scope. Same rule the read side applies in recall.
-  const scope = scopeOf(cwd);
-
-  // Never overwrite a value the caller set deliberately. The one legitimate
-  // case is a promote pass carrying the ORIGINAL row's origin forward — the
-  // dream knows where a memory came from and this hook does not. `global: true`
-  // is the model saying the row is about the person, not this project.
-  const global = field === "cwd" && params.global === true;
-  if (scope && !params[field] && !global) {
+  if (verb === "add") {
     // A write that names ANOTHER session's row is not this session's
-    // authorship. The dream's promote and the scan's backfill carry the
-    // original row's source_session — and its cwd, when it had one, rides in
-    // the same call. When the original had none, this session's cwd stamped
-    // over the gap would rescope someone else's memory to wherever the dream
-    // happened to run.
+    // authorship: the dream's promote and the scan's backfill carry the
+    // original row's source_session — and its cwd, when it had one. This
+    // session's paths stamped over the gap would rescope someone else's
+    // memory to wherever the dream happened to run.
     const source = params.source_session;
-    const foreign = field === "cwd" && source && sessionId && source !== sessionId;
-    if (!foreign) stamp[field] = scope;
+    const foreign = source && sessionId && source !== sessionId;
+    if (!foreign) {
+      fill("source_session", sessionId);
+      fill("cwd", cwd);
+      fill("root", root);
+    }
+    fill("host", "openclaw");
+  } else if (verb === "search") {
+    // A search the model makes itself is scoped only inside a project; at
+    // $HOME it is a deliberate whole-store lookup. Per-turn recall is the one
+    // that narrows those sessions to rows about the person.
+    if (isProjectDir(root)) fill("cwd_scope", root);
+  } else {
+    fill("cwd", cwd);
+    fill("root", root);
   }
-
-  // The writing host — a fact about this runtime, never the model's to fill.
-  if (field === "cwd" && !params.host) stamp.host = "openclaw";
 
   if (!Object.keys(stamp).length) return null;
   return { ...params, ...stamp };

@@ -1,6 +1,7 @@
-// Always-on core identity — the OpenClaw port of the core-memory block that
+// What a session loads at start — the OpenClaw port of the block that
 // `plugins/linggen/hooks/autostart.sh` emits as `additionalContext` on
-// SessionStart.
+// SessionStart: core identity, the "Memory scopes here" candidates line and
+// the index of standing rows filed for this directory and its parents.
 //
 // OpenClaw's `session_start` hook is observation-only and cannot inject, so the
 // block rides `before_prompt_build` instead and is returned as
@@ -11,20 +12,22 @@
 // the same core identity as one whose store is local, with no binary of its own.
 
 import { mcpCall } from "./rpc.mjs";
+import { memoryRoot } from "./scope.mjs";
 
 /**
- * Build the session-start block — core identity — or "" when the store is
- * empty (a fresh install gets a normal session with no injected block).
+ * Build the session-start block — core identity, plus the scope candidates and
+ * the index for `cwd` — or "" when the store has nothing to say (a fresh
+ * install gets a normal session with no injected block).
  *
  * One `memory_session_start` call: the daemon renders the block, so every host
- * injects the same text. Preferences are not loaded here; they surface through
- * per-turn recall like any other row.
+ * injects the same text. Everything else surfaces through per-turn recall.
  *
  * A slightly longer budget than a per-turn recall: this runs once per session,
  * and a cold daemon has just been asked to open LanceDB.
  */
-export async function buildCoreContext(client, timeoutMs = 5000) {
-  const start = await mcpCall(client, "memory_session_start", {}, timeoutMs);
+export async function buildCoreContext(client, timeoutMs = 5000, cwd = "") {
+  const args = cwd ? { cwd, root: memoryRoot(cwd) } : {};
+  const start = await mcpCall(client, "memory_session_start", args, timeoutMs);
   if (start && typeof start === "object" && !Array.isArray(start)) {
     return typeof start.block === "string" ? start.block : "";
   }

@@ -20,9 +20,13 @@
 #    blocks on the ~100MB download) and discloses that in the context line.
 #    Both binaries are required components of this plugin. Opt out of the
 #    engine auto-install with LINGGEN_NO_ENGINE_INSTALL=1.
-# 4. Emit core memory (one `memory_session_start` call) as
-#    `hookSpecificOutput.additionalContext` so the host injects it into the
-#    agent's system prompt.
+# 4. Emit what a session loads at start (one `memory_session_start` call
+#    with the session's cwd and root): core memory, the "Memory scopes here"
+#    candidates line, and the index of standing rows filed for this
+#    directory and its parents — as `hookSpecificOutput.additionalContext`
+#    so the host injects it into the agent's system prompt. Claude Code has
+#    no cd hook, so the index is this directory's at start; recall covers
+#    the rest.
 #    Read over MCP, so it works the same whether the store is on this
 #    machine or another one.
 #    CC honors the field natively; Codex ignores unknown JSON and just
@@ -33,9 +37,10 @@
 
 set -u
 
-# Drain the hook's stdin first, so install-bin and the daemon start below
-# never inherit an open pipe from the host.
-[ -t 0 ] || cat >/dev/null 2>&1 || true
+# Read the hook's stdin first (the session's cwd rides in it), so
+# install-bin and the daemon start below never inherit an open pipe.
+hook_input=""
+[ -t 0 ] || hook_input="$(cat 2>/dev/null || true)"
 
 # Address + `mcp_call`, shared with recall.sh. Located from this script's own
 # path so it works regardless of which env vars a host sets.
@@ -161,21 +166,34 @@ if ! curl -fsS --max-time 2 "${LINGGEN_URL}/api/health" >/dev/null 2>&1 \
   fi
 fi
 
-# ── Inject core memory into the session's system prompt ─────────────────────
+# ── Inject what a session loads at start ────────────────────────────────────
 #
-# One call: `memory_session_start` returns the core rows (who the user is),
+# One call: `memory_session_start` with this session's cwd and root returns
+# the core rows (who the user is), the scope candidates line and the index,
 # already rendered as `block`. The daemon renders it so every host injects the
-# same text. Preferences are not loaded here; they surface through per-turn
-# recall (recall.sh) like any other row. Over MCP, like recall — a host whose
-# store is on another machine gets the same block with no binary of its own.
-# Empty store (fresh install) emits nothing.
+# same text. Everything else surfaces through per-turn recall (recall.sh).
+# Over MCP, like recall — a host whose store is on another machine gets the
+# same block with no binary of its own. Empty store (fresh install) emits
+# nothing.
 
 command -v jq >/dev/null 2>&1 || exit 0
+
+# shellcheck source=./scope.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scope.sh" 2>/dev/null || true
+session_cwd="$(printf '%s' "$hook_input" | jq -r '.cwd // empty' 2>/dev/null || true)"
+[ -n "$session_cwd" ] || session_cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
+session_root=""
+if command -v memory_root >/dev/null 2>&1; then
+  session_root="$(memory_root "$session_cwd")"
+fi
+start_args="$(jq -nc --arg c "$session_cwd" --arg r "$session_root" '
+  {cwd: $c} + (if ($r | length) > 0 then {root: $r} else {} end)
+' 2>/dev/null || printf '{}')"
 
 # A slightly longer budget than a per-turn recall: this runs once, at session
 # start, and a cold daemon has just been asked to open LanceDB.
 to="${LING_MEM_CORE_TIMEOUT:-5}"
-start_out="$(mcp_call memory_session_start '{}' "$to")"
+start_out="$(mcp_call memory_session_start "$start_args" "$to")"
 
 # Defensive guard: a malformed payload would make the pipeline below fail
 # silently, and the session would start with no core context and no log of

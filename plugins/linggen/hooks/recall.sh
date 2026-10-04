@@ -24,7 +24,6 @@ command -v curl >/dev/null 2>&1 || exit 0
 input="$(cat)"
 prompt="$(printf '%s' "$input" | jq -r '.prompt // empty' 2>/dev/null || true)"
 cwd="$(printf '%s' "$input"   | jq -r '.cwd    // empty' 2>/dev/null || true)"
-sid="$(printf '%s' "$input"   | jq -r '.session_id // empty' 2>/dev/null || true)"
 
 [ "${#prompt}" -lt 8 ] && exit 0
 
@@ -45,27 +44,19 @@ min_score="${LING_MEM_RECALL_MIN_SCORE:-0}"
 # shellcheck source=./mcp.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/mcp.sh" 2>/dev/null || exit 0
 
-# Scope the search to the work being done here — rows written under this
-# path, plus every row that belongs to no project (identity, preferences,
-# cross-project gotchas). Sent to the daemon rather than applied to its
-# answer: the scope has to shape the ranking, because a filter applied
-# afterwards can only shrink a list that was already the wrong N. This
-# replaces a client-side `project/<name>` context filter that matched 17 rows
-# out of 1142 and therefore passed everything through the "untagged is
-# global" branch — a filter reading a namespace nothing wrote.
-#
-# A cwd that is not a project must not become a scope. `$HOME` means "no
-# particular work" and would claim every repo underneath; `~/.linggen` is the
-# engine's state dir; a temp dir is nobody's project. Scoping a read to any of
-# these hides every project row from the reader — worse than no scope. Same
-# dirs the write side refuses in stamp-cwd.sh.
-tmp="${TMPDIR:-/tmp}"
-case "$cwd" in
-  "$HOME"|"$HOME/.linggen"|"$HOME/.linggen/"*) cwd="" ;;
-  "${tmp%/}"|"${tmp%/}/"*|/tmp|/tmp/*|/private/tmp|/private/tmp/*) cwd="" ;;
-esac
-# Preferences ride recall like any other row: session start loads core only.
-search_args="$(jq -nc --arg q "$prompt" --argjson l "$limit" --arg c "$cwd" '
+# Scope the search to where this session stands, as its root (git root, or
+# where the session started): rows under it, rows at its parents, and rows
+# about the person. A skill's own dir sees only its rows; $HOME, ~/.linggen
+# and temp dirs see only rows about the person. The daemon applies it BEFORE
+# ranking — a filter applied afterwards can only shrink a list that was
+# already the wrong N — and owns the rules (ling-mem doc/scope-index-spec.md).
+# shellcheck source=./scope.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scope.sh" 2>/dev/null || true
+scope=""
+if [ -n "$cwd" ] && command -v memory_root >/dev/null 2>&1; then
+  scope="$(memory_root "$cwd")"
+fi
+search_args="$(jq -nc --arg q "$prompt" --argjson l "$limit" --arg c "$scope" '
   {query:$q, limit:$l}
   + (if ($c | length) > 0 then {cwd_scope: $c} else {} end)
 ')"
@@ -78,7 +69,7 @@ hits="$(printf '%s' "$out" | jq -r --argjson k "$topk" --argjson min "$min_score
   | map(select((.hybrid_score // .score // 0) >= $min))
   | .[:$k]
   | .[]
-  | "From memory (\(.type), \(.host // "unknown"), \((.created_at // "")[0:10]), score=\((.hybrid_score // .score // 0) * 100 | floor / 100), id=\(.id)): \(.content)"
+  | "From memory (\(.type), from=\(.from // "derived"), \(.host // "unknown"), \((.created_at // "")[0:10]), score=\((.hybrid_score // .score // 0) * 100 | floor / 100), id=\(.id)): \(.content)"
 ' 2>/dev/null || true)"
 
 hit_count="$(printf '%s\n' "$hits" | grep -c .)"
@@ -117,11 +108,9 @@ cat <<'CAPTURE'
 
 Memory capture: before finishing this turn, recognize anything worth remembering and write it at the right tier per the memory protocol (core/semantic = search-first; episodic = incidental); anchor relative time to absolute dates ("last month" → "2026-06"). Nothing worth keeping? Skip silently.
 CAPTURE
-# Session stamp: pass source_session on every add so a later scan of this
-# day's logs skips sessions that already contributed (idempotent backfill).
-if [ -n "$sid" ]; then
-  printf 'On every memory_add, pass source_session:"%s" (this session).\n' "$sid"
-fi
+# No source_session line: stamp-cwd.sh fills it on every add (host-filled,
+# never asked of the model). Codex has no stamping seam yet, so its adds go
+# unstamped until it ships PreToolUse input rewrite.
 
 if [ "$hit_count" -ge 1 ]; then
   # Mirrors linggen/src/engine/prompt/core_block.rs:RECONCILE_FOOTER.

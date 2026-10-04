@@ -15,6 +15,7 @@ import { test } from "node:test";
 import { renderBody } from "../src/commands.mjs";
 import { configureLinggenMcp } from "../src/mcp-config.mjs";
 import { scopeOf } from "../src/recall.mjs";
+import { isProjectDir } from "../src/scope.mjs";
 import { stampCwd } from "../src/stamp-cwd.mjs";
 
 const CLIENT = {
@@ -25,58 +26,65 @@ const CLIENT = {
   token: "",
 };
 
-test("scopeOf keeps a project and refuses a non-project", () => {
-  assert.equal(scopeOf("/Users/x/workspace/repo"), "/Users/x/workspace/repo");
-  assert.equal(scopeOf(homedir()), "");
-  assert.equal(scopeOf(join(homedir(), ".linggen")), "");
-  assert.equal(scopeOf(join(homedir(), ".linggen", "activity")), "");
-  assert.equal(scopeOf(join(tmpdir(), "scratch")), "");
-  assert.equal(scopeOf("/private/tmp/anything"), "");
+test("scopeOf hands the daemon the session root", () => {
+  assert.equal(scopeOf("/nonexistent/workspace/repo"), "/nonexistent/workspace/repo");
+  // The daemon reads $HOME / ~/.linggen / temp as person-rows-only; the host
+  // passes the path through.
+  assert.equal(scopeOf(homedir()), homedir());
+  assert.equal(scopeOf(join(homedir(), ".linggen", "skills", "cfo", "data")), join(homedir(), ".linggen", "skills", "cfo"));
   assert.equal(scopeOf(""), "");
 });
 
-test("stampCwd picks the field by direction and ignores other tools", () => {
-  const base = { cwd: "/repo", sessionId: "s1" };
+test("isProjectDir refuses $HOME, ~/.linggen and temp, admits a skill's dir", () => {
+  assert.equal(isProjectDir("/nonexistent/repo"), true);
+  assert.equal(isProjectDir(homedir()), false);
+  assert.equal(isProjectDir(join(homedir(), ".linggen")), false);
+  assert.equal(isProjectDir(join(homedir(), ".linggen", "activity")), false);
+  assert.equal(isProjectDir(join(homedir(), ".linggen", "skills", "dj")), true);
+  assert.equal(isProjectDir(join(tmpdir(), "scratch")), false);
+  assert.equal(isProjectDir(""), false);
+});
+
+test("stampCwd stamps by verb and ignores other tools", () => {
+  const base = { cwd: "/nonexistent/repo", sessionId: "s1" };
   assert.deepEqual(
-    stampCwd({ ...base, toolName: "mcp__plugin_linggen_ling-mem__memory_add", params: { content: "x" } }),
-    { content: "x", cwd: "/repo", host: "openclaw" },
+    stampCwd({ ...base, toolName: "mcp__plugin_linggen_ling-mem__memory_add", params: { content: "x", scope: "repo/sub" } }),
+    {
+      content: "x",
+      scope: "repo/sub",
+      source_session: "s1",
+      cwd: "/nonexistent/repo",
+      root: "/nonexistent/repo",
+      host: "openclaw",
+    },
   );
   assert.deepEqual(
     stampCwd({ ...base, toolName: "ling-mem__memory_search", params: { query: "q" } }),
-    { query: "q", cwd_scope: "/repo" },
+    { query: "q", cwd_scope: "/nonexistent/repo" },
+  );
+  assert.deepEqual(
+    stampCwd({ ...base, toolName: "ling-mem__memory_session_start", params: {} }),
+    { cwd: "/nonexistent/repo", root: "/nonexistent/repo" },
   );
   assert.equal(stampCwd({ ...base, toolName: "ling-mem__memory_delete", params: { id: "a" } }), null);
 });
 
 test("stampCwd never overwrites, and never rescopes another session's row", () => {
-  const base = { cwd: "/repo", sessionId: "s1" };
+  const base = { cwd: "/nonexistent/repo", sessionId: "s1" };
   // A promote pass carries the ORIGINAL row's origin; the dream knows where a
   // memory came from and this hook does not.
-  assert.equal(stampCwd({ ...base, toolName: "memory_add", params: { cwd: "/elsewhere", host: "linggen" } }), null);
+  assert.equal(
+    stampCwd({ ...base, toolName: "memory_add", params: { cwd: "/elsewhere", source_session: "old", host: "linggen" } }),
+    null,
+  );
   assert.equal(
     stampCwd({ ...base, toolName: "memory_add", params: { content: "x", source_session: "other", host: "codex" } }),
     null,
   );
-  // This session's own write still gets stamped.
-  assert.deepEqual(
-    stampCwd({ ...base, toolName: "memory_add", params: { content: "x", source_session: "s1" } }),
-    { content: "x", source_session: "s1", cwd: "/repo", host: "openclaw" },
-  );
 });
 
-test("stampCwd refuses a non-project cwd rather than hiding the row", () => {
-  assert.deepEqual(
-    stampCwd({ toolName: "memory_add", params: { content: "x" }, cwd: homedir(), sessionId: "s1" }),
-    { content: "x", host: "openclaw" },
-  );
+test("a model's own search at home stays a whole-store lookup", () => {
   assert.equal(stampCwd({ toolName: "memory_search", params: { query: "q" }, cwd: homedir(), sessionId: "s1" }), null);
-});
-
-test("stampCwd leaves a global row without a cwd", () => {
-  assert.deepEqual(
-    stampCwd({ toolName: "memory_add", params: { content: "x", global: true }, cwd: "/repo", sessionId: "s1" }),
-    { content: "x", global: true, host: "openclaw" },
-  );
 });
 
 test("MCP config is additive once and idempotent after", () => {
