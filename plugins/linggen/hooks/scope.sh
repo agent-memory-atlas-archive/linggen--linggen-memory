@@ -20,7 +20,10 @@ memory_root() {
     if command -v git >/dev/null 2>&1; then
         root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)"
     fi
+    # Never $HOME, and never a repo ABOVE it (a cwd under $HOME whose git
+    # root is outside it): the daemon's find_root stops at $HOME too.
     [ "$root" = "$HOME" ] && root=""
+    case "$cwd" in "$HOME"|"$HOME"/*) case "$root" in "$HOME"/*) ;; *) root="" ;; esac ;; esac
     [ -n "$root" ] || root="${CLAUDE_PROJECT_DIR:-}"
     [ -n "$root" ] || root="$cwd"
     printf '%s\n' "$root"

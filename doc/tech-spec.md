@@ -349,6 +349,18 @@ The **linggen-memory skill** is a thin wrapper in the main Linggen repo's skills
 
 For Claude Code compatibility, the SKILL.md body documents the CLI so a model invoking the skill via Bash can use it directly (the `memory_*` MCP tools are the same operations by another door). A CC user gets the same Data Browser at the same URL — all they need is to run `ling-mem serve`.
 
+## Live regression suite
+
+`./scripts/check.sh live` (`scripts/live-check.sh`) runs a scratch daemon on
+a scratch port over a fixture home and store, then checks the daemon
+(session start, scope on add/update, recall scope, MCP, CLI parity) and the
+host plugins (`scripts/plugin-check.sh`: install parity, the CC/Codex hooks,
+the OpenClaw modules, stale protocol text). `--copy-live` adds a copy of
+`~/.linggen/memory` (golden session starts, real-data scope invariants, the
+v1 → v2 step on the store backups). It never writes the real store. Run it
+whenever memory changes, before a deploy; `--bin target/release/ling-mem`
+tests a build before it replaces the installed binary.
+
 ## Release process
 
 The order, scripts, targets and local-swap rule live in the cross-product

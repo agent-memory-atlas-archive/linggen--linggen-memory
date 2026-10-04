@@ -21,7 +21,7 @@ export function isProjectDir(dir) {
   if (dir.startsWith(`${skills}/`)) return true;
   if (dir === home || under(join(home, ".linggen"))) return false;
   const tmp = tmpdir().replace(/\/$/, "");
-  if (under(tmp) || under("/tmp") || under("/private/tmp") || under("/private/var/folders")) {
+  if (under(tmp) || under("/tmp") || under("/private/tmp") || under("/var/folders") || under("/private/var/folders")) {
     return false;
   }
   return true;
