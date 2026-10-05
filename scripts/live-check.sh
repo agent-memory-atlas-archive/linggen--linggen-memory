@@ -319,6 +319,22 @@ MCONTENT="Bugfix probe: the merge keeps the surviving row's scope, not the write
 apid add "$(jq -nc --arg c "$L" --arg t "$MCONTENT" '{content:$t, tier:"semantic", type:"decision", cwd:$c, root:$c}')" >/dev/null
 A="$(apid add "$(jq -nc --arg c "$S" --arg t "$MCONTENT" '{content:$t, tier:"semantic", type:"decision", cwd:$c, root:$c}')")"
 expect "fix 4: dedup merge keeps scope" "$A" '.action == "merged" and .fact.scope == "'"$L"'"' "merge moved the row"
+# The 2026-10-05 loss: a replacement whose words equal its loser's merged
+# into the loser, then retired it — memory_get found nothing. Now the new row
+# lands, the loser retires into it, and exactly one live row says the words.
+RCONTENT="Bugfix probe: a replacement equal to its loser keeps one live row."
+RLOSER="$(apid add "$(jq -nc --arg c "$L" --arg t "$RCONTENT" '{content:$t, tier:"semantic", type:"decision", cwd:$c, root:$c}')" | jq -r '.fact.id')"
+A="$(mcpd memory_add "$(jq -nc --arg c "$L" --arg t "$RCONTENT" --arg id "$RLOSER" '{content:$t, type:"decision", replace_ids:[$id], cwd:$c, root:$c}')")"
+RNEW="$(printf '%s' "$A" | jq -r '.fact.id')"
+G="$(mcpd memory_get "$(jq -nc --arg id "$RNEW" '{id:$id}')")"
+N="$(apid list '{"limit":500}' | jq --arg t "$RCONTENT" 'map(select(.content == $t)) | length')"
+if printf '%s' "$G" | jq -e --arg t "$RCONTENT" '.content == $t' >/dev/null 2>&1 && [ "$N" = 1 ] && [ "$RNEW" != "$RLOSER" ]; then
+  pass "replace into an equal row: one live row remains"
+else
+  fail "replace into an equal row: one live row remains" "add=$(printf '%s' "$A" | head -c 160) get=$(printf '%s' "$G" | head -c 80) live=$N"
+fi
+A="$(apid add "$(jq -nc --arg c "$L" --arg id "$RNEW" --arg s "$L/story" '{content:"Bugfix probe: a named scope beats the loser'"'"'s.", type:"decision", replace_ids:[$id], scope:$s, cwd:$c, root:$c}')")"
+expect "replacement: a named scope wins over the loser's" "$A" '.fact.scope == "'"$L/story"'" and .fact.tier == "semantic"' "named scope lost"
 R="$(apid list '{"episodic":true,"past_ttl":true,"limit":200}')"
 expect "fix 6: one TTL clock (occurred_at first)" "$R" \
   '(map(.id) | index("'"$ID_e1"'") != null) and (map(.id) | index("'"$ID_e2"'") == null)' "past_ttl ignores occurred_at"
@@ -385,6 +401,8 @@ got="$(via_hook "Nested probe three: no scope lands on the shell cwd." "$S/src" 
 got="$(via_hook "Nested probe four: a dir outside the root falls back." "$L" '{"scope":"/etc"}')"
 [ "$got" = "$L" ] && pass "hook add from nested repo: outside root → cwd" || fail "hook add from nested repo: outside root → cwd" "stored $got"
 
+R="$(mcpd memory_add '{"content":"MCP probe: an unadvertised flag sent as a string.","skip_dedup":"true"}')"
+expect "MCP add: unadvertised skip_dedup:\"true\" is a boolean" "$R" '.action == "added"' "string boolean refused"
 R="$(mcp memory_add '{"content":"MCP probe: a field of the wrong type is named.","indexed":"perhaps"}')"
 expect "MCP add: bad type reports the field, not a decode error" "$R" \
   '.error.message | (test("indexed") and (test("error decoding response body") | not))' "opaque error"

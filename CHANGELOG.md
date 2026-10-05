@@ -71,6 +71,19 @@
 
 ### Fixed
 
+- **The first session after a daemon start gets its core memory.** `serve`
+  loaded the embedding model before serving, so every request queued on the
+  bound port waited for it — `session_start`, which never embeds, took 3–6 s
+  on a cold disk and missed the engine's 2 s cap. The model now loads (and
+  runs one warm-up pass) in the background; only calls that embed wait for
+  it, and a failed load is retried by the next one.
+- **A replacement equal to its loser no longer deletes both.** `memory_add`
+  with `replace_ids` whose content matched a replaced row dedup-merged into
+  that row, then archived it — nothing live was left. Dedup never merges
+  into a row the call replaces, nor into an archived row; the row a write
+  lands in is never retired as its own loser.
+- **MCP: an unadvertised flag sent as a string** (`skip_dedup: "true"`)
+  becomes a boolean instead of a 422.
 - **A named scope survives a `cd`** (Claude Code plugin). The stamp hook
   rooted each call at the shell cwd's own git root, not the session's: in a
   session started in a non-git workspace and cd'd into one of its repos, a
