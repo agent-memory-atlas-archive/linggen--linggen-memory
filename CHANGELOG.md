@@ -1,6 +1,9 @@
 # Changelog
 
-## [Unreleased] — scope and index (`doc/scope-index-spec.md`)
+## [1.9.1] - 2026-10-05 — scope and index (`doc/scope-index-spec.md`)
+
+1.9.0 was never published; its entry below ships in 1.9.1. Plugin
+manifests: CC/Codex 1.7.15, OpenClaw 0.1.10.
 
 ### Added
 
@@ -10,6 +13,12 @@
 - **`LINGGEN_RELEASE_BASE=<url>`** — upgrade and `install-bin.sh` read the
   release from `<url>/linggen/linggen-memory/` (`release.json` + assets)
   instead of GitHub, uncached, SHA-256 still required. For the release gate.
+- **The plugin for a machine without git.** The release carries
+  `linggen-plugin.tar.gz` (+ `.sha256`): `install-plugin.sh` installs it into
+  Claude Code and Codex as a folder marketplace, with no Command Line Tools
+  dialog on a fresh Mac.
+- **The mac `ling-mem` ships Developer ID signed and notarized**, so a
+  browser download opens; `release.sh` refuses an ad-hoc upload.
 - **A row's `scope`** (was `cwd`) — the absolute directory it is about;
   none = about the person. `memory_add` takes `scope` (one of the session's
   "Memory scopes here" candidates); the daemon accepts an existing dir
@@ -77,6 +86,8 @@
 
 ### Fixed
 
+- **`install-bin.sh` swaps by fresh inode + rename** and restarts an older
+  running daemon on the new binary; SHA-256 verification has no off switch.
 - **The first session after a daemon start gets its core memory.** `serve`
   loaded the embedding model before serving, so every request queued on the
   bound port waited for it — `session_start`, which never embeds, took 3–6 s
