@@ -54,8 +54,8 @@ min_score="${LING_MEM_RECALL_MIN_SCORE:-0}"
 # shellcheck source=./scope.sh
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scope.sh" 2>/dev/null || true
 scope=""
-if [ -n "$cwd" ] && command -v memory_root >/dev/null 2>&1; then
-  scope="$(memory_root "$cwd")"
+if [ -n "$cwd" ] && command -v session_root >/dev/null 2>&1; then
+  scope="$(session_root "$cwd")"
 fi
 search_args="$(jq -nc --arg q "$prompt" --argjson l "$limit" --arg c "$scope" '
   {query:$q, limit:$l}

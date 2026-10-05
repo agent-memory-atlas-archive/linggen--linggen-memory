@@ -71,6 +71,12 @@
 
 ### Fixed
 
+- **A named scope survives a `cd`** (Claude Code plugin). The stamp hook
+  rooted each call at the shell cwd's own git root, not the session's: in a
+  session started in a non-git workspace and cd'd into one of its repos, a
+  candidate (`linggen/linggen`) or an absolute sibling dir was rejected and
+  the row filed under cwd. Hooks now send the session's root (`scope.sh`
+  `session_root`) for add, search, recall and session start.
 - An add with no `tier` lands episodic, as the protocol says (was semantic).
 - `from` is on the `memory_add` schema.
 - One `source_session` story: host-filled everywhere; recall.sh stops

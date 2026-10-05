@@ -366,6 +366,25 @@ expect "MCP add: through stamp-cwd.sh (scope ~, summary, indexed:false)" "$R" \
   '.fact.scope == "'"$L"'" and .fact.source_session == "lc-sess" and .fact.host == "claude-code" and .fact.summary == "Shared sessions replace guest mode"' \
   "stamped add lost fields"
 MID="$(printf '%s' "$R" | jq -r '.fact.id')"
+# The 2026-10-05 bug: a session started in the non-git workspace, shell cd'd
+# into one of its repos. Through the real stamp hook, the model's scope must
+# land where it names — relative candidate, absolute dir under the session
+# root — and only no scope or a dir outside root falls back to cwd.
+via_hook() { # content cwd extra-json → stored scope
+  jq -nc --arg t "$1" --arg c "$2" --argjson x "$3" \
+    '{tool_name:"mcp__plugin_linggen_ling-mem__memory_add", session_id:"lc-nest", cwd:$c, tool_input:({content:$t, skip_dedup:true} + $x)}' \
+    | HOME="$FHOME" CLAUDE_PROJECT_DIR="$W" bash "$REPO/plugins/linggen/hooks/stamp-cwd.sh" \
+    | jq -c '.hookSpecificOutput.updatedInput' | { read -r a; mcpd memory_add "$a"; } | jq -r '.fact.scope'
+}
+got="$(via_hook "Nested probe one: a relative candidate from a sibling repo." "$S/src" '{"scope":"workspace/lingjing/story"}')"
+[ "$got" = "$L/story" ] && pass "hook add from nested repo: relative candidate kept" || fail "hook add from nested repo: relative candidate kept" "stored $got"
+got="$(via_hook "Nested probe two: an absolute dir under the session root." "$L" "$(jq -nc --arg s "$S/src" '{scope:$s}')")"
+[ "$got" = "$S/src" ] && pass "hook add from nested repo: absolute scope kept" || fail "hook add from nested repo: absolute scope kept" "stored $got"
+got="$(via_hook "Nested probe three: no scope lands on the shell cwd." "$S/src" '{}')"
+[ "$got" = "$S/src" ] && pass "hook add from nested repo: no scope → cwd" || fail "hook add from nested repo: no scope → cwd" "stored $got"
+got="$(via_hook "Nested probe four: a dir outside the root falls back." "$L" '{"scope":"/etc"}')"
+[ "$got" = "$L" ] && pass "hook add from nested repo: outside root → cwd" || fail "hook add from nested repo: outside root → cwd" "stored $got"
+
 R="$(mcp memory_add '{"content":"MCP probe: a field of the wrong type is named.","indexed":"perhaps"}')"
 expect "MCP add: bad type reports the field, not a decode error" "$R" \
   '.error.message | (test("indexed") and (test("error decoding response body") | not))' "opaque error"

@@ -29,6 +29,28 @@ memory_root() {
     printf '%s\n' "$root"
 }
 
+# session_root <cwd> — the root this SESSION's scope candidates were shown
+# against: memory_root of where the session started (CLAUDE_PROJECT_DIR), for
+# any cwd at or below it. Claude Code hands every hook the SHELL's cwd, which
+# moves with `cd`; rooting each call at that cwd's own git root re-based the
+# candidates under the model. Started in a non-git workspace and cd'd into a
+# nested repo, `linggen/linggen` resolved against the wrong parent and an
+# absolute sibling dir fell outside the per-call root, so the daemon dropped
+# both for cwd (2026-10-05). A cwd outside the start dir — or no start dir
+# (Codex) — is rooted on its own.
+session_root() {
+    local cwd="$1" start="${CLAUDE_PROJECT_DIR:-}" root=""
+    [ -n "$cwd" ] || return 0
+    start="${start%/}"
+    if [ -n "$start" ]; then
+        root="$(memory_root "$start")"
+        if is_project_dir "$root"; then
+            case "$cwd" in "$root"|"$root"/*) printf '%s\n' "$root"; return 0 ;; esac
+        fi
+    fi
+    memory_root "$cwd"
+}
+
 # is_project_dir <dir> — can rows be about this dir? Not $HOME, not
 # ~/.linggen outside a skill's own dir, not a temp dir. Same rule as the
 # daemon's memory::scope::is_scope_dir and the engine's is_project_dir.

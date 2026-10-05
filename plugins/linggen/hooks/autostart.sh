@@ -183,8 +183,8 @@ command -v jq >/dev/null 2>&1 || exit 0
 session_cwd="$(printf '%s' "$hook_input" | jq -r '.cwd // empty' 2>/dev/null || true)"
 [ -n "$session_cwd" ] || session_cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 session_root=""
-if command -v memory_root >/dev/null 2>&1; then
-  session_root="$(memory_root "$session_cwd")"
+if command -v session_root >/dev/null 2>&1; then
+  session_root="$(session_root "$session_cwd")"
 fi
 start_args="$(jq -nc --arg c "$session_cwd" --arg r "$session_root" '
   {cwd: $c} + (if ($r | length) > 0 then {root: $r} else {} end)

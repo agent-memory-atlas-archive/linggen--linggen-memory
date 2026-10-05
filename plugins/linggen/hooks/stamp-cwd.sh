@@ -10,7 +10,8 @@
 #   memory_session_start cwd, root
 #
 # The daemon owns the rules — which dirs can hold rows, which a root sees —
-# so this hook only hands it paths. The model picks a row's `scope` from the
+# so this hook only hands it paths. `root` is the SESSION's root (scope.sh
+# session_root), not the shell cwd's: the candidates were shown against it. The model picks a row's `scope` from the
 # candidates the SessionStart hook showed; the daemon checks it against
 # `root` and falls back to `cwd`.
 #
@@ -55,7 +56,7 @@ case "$tool" in
 esac
 
 root=""
-if [ -n "$cwd" ]; then root="$(memory_root "$cwd")"; fi
+if [ -n "$cwd" ]; then root="$(session_root "$cwd")"; fi
 
 # A field the caller set wins — the one legitimate case is a promote pass
 # carrying the ORIGINAL row's session, scope (sent as `cwd`) and host forward.

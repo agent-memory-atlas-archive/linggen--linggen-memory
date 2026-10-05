@@ -55,6 +55,14 @@ host offers candidates and the model picks.
 
 - **Root**: the git root of the session cwd; outside git, the directory the
   session started in (CC `CLAUDE_PROJECT_DIR`, Linggen `session.cwd`).
+  It is the root of where the session STARTED and does not move when the
+  shell cds below it: the candidates were shown against it, so every stamp
+  (add, search, recall, session start) sends that same root. Claude Code
+  hands hooks the shell's cwd; rooting each call at that cwd's own git root
+  re-based the candidates — a session started in a non-git workspace and
+  cd'd into one of its repos had `linggen/linggen` and an absolute sibling
+  dir dropped for cwd (2026-10-05). A cwd outside the start dir roots on its
+  own (`scope.sh` `session_root`).
 - **Candidates**: every directory from root down to the session cwd, plus
   root's subdirectories that carry a marker (`SKILL.md`, `CLAUDE.md`,
   `README*`, `Cargo.toml`, `package.json`, `pubspec.yaml`), plus parents of

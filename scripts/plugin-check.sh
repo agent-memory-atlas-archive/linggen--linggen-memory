@@ -211,6 +211,27 @@ PY
     out="$(stamp "$T" '{"content":"x"}' "$SKILL/sub")"
     expect "stamp add: skill dir is its own root" "$out" '.hookSpecificOutput.updatedInput.root == "'"$SKILL"'"' "skill root"
   fi
+  # A session started in a non-git workspace, shell cd'd into a nested repo:
+  # root stays the workspace the candidates were shown against (the
+  # 2026-10-05 bug stamped the nested repo's git root and the daemon dropped
+  # the model's scope for cwd). A cwd outside the start dir roots on its own.
+  WS="$(dirname "$PROJ")" SIB=""
+  for d in "$WS"/*; do
+    [ -d "$d/.git" ] && [ "$d" != "$PROJ" ] && { SIB="$d"; break; }
+  done
+  if [ -n "$SIB" ] && [ ! -e "$WS/.git" ]; then
+    out="$(STAMP_PROJECT="$WS" stamp "$T" '{"content":"x","scope":"workspace/lingjing"}' "$SIB")"
+    expect "stamp add: nested repo keeps the session root" "$out" \
+      '.hookSpecificOutput.updatedInput | .root == "'"$WS"'" and .cwd == "'"$SIB"'" and .scope == "workspace/lingjing"' "root = nested git root"
+    out="$(STAMP_PROJECT="$WS" stamp mcp__plugin_linggen_ling-mem__memory_search '{"query":"q"}' "$PROJ/story")"
+    expect "stamp search: nested repo keeps the session root" "$out" \
+      '.hookSpecificOutput.updatedInput.scope_root == "'"$WS"'"' "scope_root = nested git root"
+    out="$(STAMP_PROJECT="$PROJ" stamp "$T" '{"content":"x"}' "$SIB")"
+    expect "stamp add: cwd outside the start dir roots on its own" "$out" \
+      '.hookSpecificOutput.updatedInput.root == "'"$SIB"'"' "foreign cwd took the start root"
+  else
+    skip "stamp add: nested repo keeps the session root" "no sibling repo under a non-git $WS"
+  fi
   out="$(stamp mcp__plugin_linggen_ling-mem__memory_delete '{"id":"x"}' "$PROJ")"
   [ -z "$out" ] && pass "stamp: other tools untouched" || fail "stamp: other tools untouched" "$out"
 
