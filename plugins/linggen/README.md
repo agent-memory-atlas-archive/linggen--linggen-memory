@@ -15,6 +15,9 @@ hook, plus everything else the Linggen daemon offers. Never run both.
 /plugin install linggen@linggen-memory
 ```
 
+No git (a fresh Mac)? `curl -fsSL https://linggen.dev/install-plugin.sh | bash`
+installs the release bundle into Claude Code and Codex instead.
+
 That's the whole install. **The plugin's session-start hook installs
 its two required binaries automatically**: `ling-mem` (memory daemon,
 to `~/.local/bin`) and the **Linggen engine** (`ling`, ~100MB —

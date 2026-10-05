@@ -112,6 +112,12 @@ Linggen       Settings → Skills → shared-memory   (in-app)
 
 Run these in your shell, not in the agent prompt — the `@linggen-memory` qualifier is required. On Claude Code and Codex, restart the agent afterwards to load the plugin.
 
+The marketplace commands clone with git. On a Mac without it (a fresh Mac has only the Command Line Tools stub, which opens an install dialog), use the one-liner — it installs this release's plugin bundle into Claude Code and Codex, and uses git when present:
+
+```bash
+curl -fsSL https://linggen.dev/install-plugin.sh | bash
+```
+
 The `ling-mem` binary is fetched automatically on first use (pinned, SHA-256 verified) to the one cross-host location `~/.local/bin/ling-mem`. To install just the binary manually:
 
 ```bash

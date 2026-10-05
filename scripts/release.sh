@@ -282,6 +282,10 @@ else
   done
 fi
 
+# The plugin marketplace as one tarball: what install-plugin.sh installs from
+# on a machine without git (a fresh Mac has only the Command Line Tools stub).
+"$ROOT_DIR/scripts/package-plugin.sh" "$DIST_DIR/linggen-plugin.tar.gz"
+
 # ── Step 2: GitHub release ───────────────────────────────────────────────────
 
 if [ "$NO_UPLOAD" = "true" ]; then

@@ -25,6 +25,7 @@ skills.sh has no version — it tracks repo `HEAD`.
 | **Claude Code — decentralized** | repo marketplace (`.claude-plugin/marketplace.json`) | users: `/plugin marketplace add linggen/linggen-memory` → install | live |
 | **Claude Code — community marketplace** | `anthropics/claude-plugins-community` | submit at claude.ai/settings/plugins/submit (`claude plugin validate --strict` first); CI pins a SHA on approval | submitted; acceptance not yet observed |
 | **Claude Code — official** | `claude-plugins-official` | invite-only (Anthropic) | future |
+| **No git — `linggen.dev/install-plugin.sh`** | release asset `linggen-plugin.tar.gz` (+`.sha256`, `scripts/package-plugin.sh`, uploaded by `release.sh`) | users: `curl -fsSL https://linggen.dev/install-plugin.sh \| bash` → the bundle at `~/.linggen/marketplace/linggen-memory`, added as a folder marketplace to Claude Code and Codex (git present → the GitHub marketplace) | new |
 | **Codex — self-host repo marketplace** | `.agents/plugins/marketplace.json` | users: `codex plugin marketplace add linggen/linggen-memory` → `codex plugin add linggen@linggen-memory` | live |
 | **Codex — official directory** | OpenAI Codex Plugin Directory | curated, self-serve "coming soon" | future |
 | **skills.sh** | auto-discovers `SKILL.md` in `linggen/linggen-memory` | no publish step; tracks repo `HEAD`. `npx skills add linggen/linggen-memory@linggen` | live |
