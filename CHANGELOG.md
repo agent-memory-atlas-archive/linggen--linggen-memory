@@ -4,6 +4,12 @@
 
 ### Added
 
+- **`ling-mem upgrade --rollback`** swaps back to `ling-mem.prev` (again to
+  return) and restarts the daemon on it. An upgrade whose new binary fails
+  `--version` (10 s) or the daemon restart now puts the previous one back.
+- **`LINGGEN_RELEASE_BASE=<url>`** — upgrade and `install-bin.sh` read the
+  release from `<url>/linggen/linggen-memory/` (`release.json` + assets)
+  instead of GitHub, uncached, SHA-256 still required. For the release gate.
 - **A row's `scope`** (was `cwd`) — the absolute directory it is about;
   none = about the person. `memory_add` takes `scope` (one of the session's
   "Memory scopes here" candidates); the daemon accepts an existing dir

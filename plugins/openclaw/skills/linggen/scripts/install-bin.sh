@@ -22,6 +22,10 @@
 # Mandatory SHA-256 verification (override with LING_MEM_SKIP_CHECKSUM=1).
 # Source: https://github.com/linggen/linggen-memory/releases
 #
+# LINGGEN_RELEASE_BASE=<url> replaces GitHub and the mirror (the release
+# gate's copy of a draft): assets from <url>/linggen/linggen-memory/<asset>,
+# tags from its release.json. SHA-256 stays mandatory there.
+#
 set -euo pipefail
 
 REPO="linggen/linggen-memory"
@@ -37,7 +41,7 @@ while [ $# -gt 0 ]; do
     --quiet)   QUIET=1; shift ;;
     --force)   FORCE=1; shift ;;
     -h|--help)
-      sed -n '3,23p' "$0"; exit 0 ;;
+      sed -n '3,27p' "$0"; exit 0 ;;
     *) echo "install-bin: unknown arg: $1" >&2; exit 2 ;;
   esac
 done
@@ -58,8 +62,16 @@ is_exact_tag() { case "$1" in v[0-9]*.[0-9]*.[0-9]*) return 0 ;; *) return 1 ;; 
 # (Cloudflare) mirrors our release traffic at /dl/*. Every network fetch
 # below tries GitHub first, then the mirror.
 MIRROR="https://linggen.dev/dl"
+RELEASE_BASE="${LINGGEN_RELEASE_BASE:-}"
+RELEASE_BASE="${RELEASE_BASE%/}"
 
 list_release_tags() {
+  if [ -n "$RELEASE_BASE" ]; then
+    curl -fsSL "${RELEASE_BASE}/${REPO}/release.json" \
+      | grep -oE '"tag_name"[[:space:]]*:[[:space:]]*"[^"]+"' \
+      | sed -E 's/.*"([^"]+)"$/\1/'
+    return
+  fi
   { curl -fsSL --retry 3 --retry-delay 2 \
          -H 'Accept: application/vnd.github+json' \
          "https://api.github.com/repos/${REPO}/releases?per_page=100" \
@@ -86,6 +98,8 @@ highest_matching() {
 resolve_version() {
   local spec="$1"
   is_exact_tag "$spec" && { printf '%s\n' "$spec"; return 0; }
+  # An override names one release; never cache it or answer from the cache.
+  [ -n "$RELEASE_BASE" ] && { highest_matching "$spec"; return; }
 
   local key cache
   key="$(printf '%s' "$spec" | tr -c 'A-Za-z0-9._-' '_')"
@@ -163,6 +177,10 @@ MIRROR_BASE="${MIRROR}/release/${REPO}/${VERSION}"
 # either way, so a compromised or truncated mirror response cannot install.
 fetch_asset() {
   local name="$1"
+  if [ -n "$RELEASE_BASE" ]; then
+    curl -fsSL "${RELEASE_BASE}/${REPO}/${name}" -o "$TMP/$name"
+    return
+  fi
   curl -fsSL --retry 3 --retry-delay 2 "${BASE}/${name}" -o "$TMP/$name" \
     || { say "GitHub unreachable — using mirror for $name"; \
          curl -fsSL "${MIRROR_BASE}/${name}" -o "$TMP/$name"; }
@@ -174,7 +192,7 @@ trap 'rm -rf "$TMP"' EXIT
 say "downloading ling-mem $VERSION ($TARGET)"
 fetch_asset "$ASSET"
 
-if [ "${LING_MEM_SKIP_CHECKSUM:-0}" = "1" ]; then
+if [ "${LING_MEM_SKIP_CHECKSUM:-0}" = "1" ] && [ -z "$RELEASE_BASE" ]; then
   say "WARNING: SHA-256 verification skipped"
 else
   fetch_asset "$ASSET.sha256"
