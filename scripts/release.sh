@@ -153,13 +153,13 @@ build_native_cargo() {
     BIN_PATH="$ROOT_DIR/target/release/ling-mem"
   fi
 
-  # Re-sign mac binaries adhoc. cargo emits linker-signed binaries whose
-  # signature macOS 26.x (Sequoia+) rejects with `SIGKILL Code Signature
-  # Invalid` on first launch from /usr/local/bin or any copy-target. A
-  # fresh adhoc signature via `codesign -s -` is enough — no Developer ID
-  # needed for ling-mem's local-install distribution model.
+  # Re-sign mac binaries. cargo emits linker-signed binaries whose signature
+  # macOS 26.x rejects with `SIGKILL Code Signature Invalid` on first launch
+  # from any copy-target. Developer ID + hardened runtime + notarization when
+  # the identity is in the keychain (a browser download then passes
+  # Gatekeeper); ad-hoc otherwise (scripts/sign-mac.sh).
   if [ "$PLATFORM_OS" = "mac" ]; then
-    codesign --force --sign - "$BIN_PATH"
+    "$ROOT_DIR/scripts/sign-mac.sh" "$BIN_PATH"
   fi
 
   # Verify the binary reports the expected version (skip on cross-compile —
@@ -295,6 +295,20 @@ if [ "$NO_UPLOAD" = "true" ]; then
   echo "Artifacts in $DIST_DIR:"
   find "$DIST_DIR" -type f
   exit 0
+fi
+
+# A mac release ships Developer ID signed + notarized, or a browser download
+# is refused as "damaged". LINGGEN_ADHOC_RELEASE=1 lets ad-hoc through.
+if [ "$PLATFORM_OS" = "mac" ] && [ "${LINGGEN_ADHOC_RELEASE:-0}" != 1 ]; then
+  check_dir="$(mktemp -d)"
+  tar -xzf "$OUT_TARBALL" -C "$check_dir" ./ling-mem 2>/dev/null || tar -xzf "$OUT_TARBALL" -C "$check_dir" ling-mem
+  check_sig="$(codesign -dvv "$check_dir/ling-mem" 2>&1)"
+  if ! grep -q '^Authority=Developer ID Application' <<<"$check_sig"; then
+    rm -rf "$check_dir"
+    echo "Error: $TARBALL_BASENAME carries a ling-mem that is not Developer ID signed — see scripts/sign-mac.sh" >&2
+    exit 1
+  fi
+  rm -rf "$check_dir"
 fi
 
 echo ""
