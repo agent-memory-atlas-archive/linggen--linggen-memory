@@ -19,8 +19,8 @@
 #   --quiet            suppress informational output
 #   --force            re-download even if version matches
 #
-# Mandatory SHA-256 verification (override with LING_MEM_SKIP_CHECKSUM=1).
-# Source: https://github.com/linggen/linggen-memory/releases
+# Mandatory SHA-256 verification against the release's .sha256 sibling; a
+# missing or mismatched one aborts before the installed binary is touched.
 #
 # LINGGEN_RELEASE_BASE=<url> replaces GitHub and the mirror (the release
 # gate's copy of a draft): assets from <url>/linggen/linggen-memory/<asset>,
@@ -192,42 +192,39 @@ trap 'rm -rf "$TMP"' EXIT
 say "downloading ling-mem $VERSION ($TARGET)"
 fetch_asset "$ASSET"
 
-if [ "${LING_MEM_SKIP_CHECKSUM:-0}" = "1" ] && [ -z "$RELEASE_BASE" ]; then
-  say "WARNING: SHA-256 verification skipped"
-else
-  fetch_asset "$ASSET.sha256"
+fetch_asset "$ASSET.sha256" \
+  || { echo "install-bin: no published .sha256 for $ASSET — not installing" >&2; exit 1; }
 
-  # Pull the expected hex digest and reject anything that doesn't look
-  # like a real checksum line. Both `shasum -c` and `sha256sum -c` parse
-  # the file as `<hex>  <filename>` — a malformed file (HTML error page,
-  # truncated download, wrong path component) can pass `-c` silently on
-  # some implementations when the filename doesn't match any file in cwd
-  # ("no properly formatted SHA1 checksum lines found" → exit 1 on GNU
-  # but inconsistent elsewhere). Pin both inputs explicitly: extract the
-  # first 64-hex token, recompute, compare literal strings.
-  expected="$(awk 'match($0, /^[0-9a-fA-F]{64}/) { print toupper(substr($0, RSTART, RLENGTH)); exit }' "$TMP/$ASSET.sha256")"
-  if [ -z "$expected" ]; then
-    echo "install-bin: malformed .sha256 for $ASSET" >&2
-    sed -n '1,3p' "$TMP/$ASSET.sha256" >&2
-    exit 1
-  fi
-
-  if command -v shasum >/dev/null 2>&1; then
-    actual="$(shasum -a 256 "$TMP/$ASSET" | awk '{print toupper($1)}')"
-  elif command -v sha256sum >/dev/null 2>&1; then
-    actual="$(sha256sum "$TMP/$ASSET" | awk '{print toupper($1)}')"
-  else
-    echo "install-bin: no shasum / sha256sum available" >&2; exit 1
-  fi
-
-  if [ "$actual" != "$expected" ]; then
-    echo "install-bin: SHA-256 mismatch" >&2
-    echo "  expected: $expected" >&2
-    echo "  actual:   $actual" >&2
-    exit 1
-  fi
-  say "verified SHA-256"
+# Pull the expected hex digest and reject anything that doesn't look
+# like a real checksum line. Both `shasum -c` and `sha256sum -c` parse
+# the file as `<hex>  <filename>` — a malformed file (HTML error page,
+# truncated download, wrong path component) can pass `-c` silently on
+# some implementations when the filename doesn't match any file in cwd
+# ("no properly formatted SHA1 checksum lines found" → exit 1 on GNU
+# but inconsistent elsewhere). Pin both inputs explicitly: extract the
+# first 64-hex token, recompute, compare literal strings.
+expected="$(awk 'match($0, /^[0-9a-fA-F]{64}/) { print toupper(substr($0, RSTART, RLENGTH)); exit }' "$TMP/$ASSET.sha256")"
+if [ -z "$expected" ]; then
+  echo "install-bin: malformed .sha256 for $ASSET" >&2
+  sed -n '1,3p' "$TMP/$ASSET.sha256" >&2
+  exit 1
 fi
+
+if command -v shasum >/dev/null 2>&1; then
+  actual="$(shasum -a 256 "$TMP/$ASSET" | awk '{print toupper($1)}')"
+elif command -v sha256sum >/dev/null 2>&1; then
+  actual="$(sha256sum "$TMP/$ASSET" | awk '{print toupper($1)}')"
+else
+  echo "install-bin: no shasum / sha256sum available" >&2; exit 1
+fi
+
+if [ "$actual" != "$expected" ]; then
+  echo "install-bin: SHA-256 mismatch" >&2
+  echo "  expected: $expected" >&2
+  echo "  actual:   $actual" >&2
+  exit 1
+fi
+say "verified SHA-256"
 
 # Replace any legacy symlink (older plugins symlinked ~/.local/bin/ling-mem to
 # a per-plugin data-dir copy) with a real file, so tar doesn't write through it.
