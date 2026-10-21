@@ -2,7 +2,7 @@
 
 ## [1.11.0] - 2026-10-21 — ask to connect, click to allow
 
-Plugin manifests: CC/Codex 1.7.17.
+Plugin manifests: CC/Codex 1.7.18.
 
 ### Added
 
@@ -16,6 +16,14 @@ Plugin manifests: CC/Codex 1.7.17.
   (Revoke) and Denied (Un-deny).
 - **`/linggen:config --ling-mem <ip>:9528`** with no token asks that machine
   and waits up to two minutes for the click; `--token` still works.
+- **`/linggen:config` with no arguments guides:** each address with ok / not
+  approved / no answer, the one next step that fits, and the common commands.
+- **`~/.linggen/client.json` is the authority** for where ling and ling-mem
+  live (the engine's Settings page writes it too): hooks read it before env;
+  the SessionStart hook re-mirrors it into Claude Code's env when they drift
+  (`config.sh --mirror`) and says to restart. The MCP servers take the token
+  from a `headersHelper` (`scripts/mem-headers.sh`), read at each connect,
+  with the env header as fallback.
 
 ### Security
 

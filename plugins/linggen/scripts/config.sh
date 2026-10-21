@@ -17,6 +17,7 @@
 #   config.sh --ling-mem 192.168.1.5:9528  # asks that machine; approve it there
 #   config.sh --ling-mem 192.168.1.5:9528 --token <device-token>   # manual
 #   config.sh --local                      # back to this machine
+#   config.sh --mirror                     # re-mirror client.json into the hosts (hooks)
 #
 # Writes ~/.linggen/client.json, which the hooks read. Also mirrors the two
 # addresses into each host's own MCP wiring, because a plugin's MCP declaration
@@ -42,7 +43,7 @@ command -v curl >/dev/null 2>&1 || die "config: curl is required"
 
 # ── Arguments ───────────────────────────────────────────────────────────────
 
-ling="" ling_mem="" token="" reset=0 show_only=1
+ling="" ling_mem="" token="" reset=0 show_only=1 mirror_only=0
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -50,6 +51,7 @@ while [ $# -gt 0 ]; do
         --ling-mem) ling_mem="${2:-}"; shift 2; show_only=0 ;;
         --token)    token="${2:-}";    shift 2; show_only=0 ;;
         --local)    reset=1;           shift;   show_only=0 ;;
+        --mirror)   mirror_only=1;     shift;   show_only=0 ;;
         -h|--help)  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)          die "config: unknown argument $1" ;;
     esac
@@ -83,38 +85,6 @@ else
     new_ling_mem="${ling_mem:-${cur_ling_mem:-$DEFAULT_LING_MEM}}"
     new_token="${token:-$cur_token}"
 fi
-
-# ── Probe before claiming anything works ────────────────────────────────────
-#
-# A config command that writes a file and declares success has told the user
-# nothing they didn't type. What they want to know is whether the address is
-# real, so ask it.
-
-probe() { # $1 base url, $2 token — prints a one-line verdict
-    local base="$1" tok="${2:-}" auth=() ver code tools
-    [ -n "$tok" ] && auth=(-H "x-linggen-device: $tok")
-
-    # Ask `/mcp` for its tool list, NOT `/api/health`. Health is deliberately
-    # open so a probe works before pairing — which means it answers "ok" for a
-    # daemon this host cannot actually use, and the user would find out later
-    # as silently empty recall. `tools/list` goes through the same gate the
-    # real calls do, so this verdict is the one that matters.
-    tools="$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 --connect-timeout 2 \
-        -H 'Content-Type: application/json' ${auth[@]+"${auth[@]}"} \
-        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' \
-        "$base/mcp" 2>/dev/null)"
-    case "$tools" in
-        200) ;;
-        401|403) printf 'reachable, but this host is not approved — run /linggen:config --ling-mem <addr> to ask'; return 1 ;;
-        000) printf 'no answer'; return 1 ;;
-        *)   printf 'HTTP %s from /mcp' "$tools"; return 1 ;;
-    esac
-
-    # Reachable AND allowed. The version is a nicety, from the open probe.
-    ver="$(curl -fsS --max-time 4 --connect-timeout 2 ${auth[@]+"${auth[@]}"} \
-        "$base/api/health" 2>/dev/null | jq -r '.version // .data.version // empty' 2>/dev/null)"
-    printf 'ok%s' "$([ -n "$ver" ] && printf ' · %s' "$ver")"
-}
 
 # ── Ask to connect ──────────────────────────────────────────────────────────
 #
@@ -169,7 +139,7 @@ ask_to_connect() { # $1 base — prints the token, or dies with why not
     die "config: no answer within two minutes — run this again."
 }
 
-if [ "$show_only" = 0 ] && [ "$reset" = 0 ] && [ -z "$token" ]; then
+if [ "$show_only" = 0 ] && [ "$mirror_only" = 0 ] && [ "$reset" = 0 ] && [ -z "$token" ]; then
     case "$(mcp_code "$new_ling_mem" "$new_token")" in
         401|403)
             new_token="$(ask_to_connect "$new_ling_mem")" || exit 1
@@ -177,20 +147,6 @@ if [ "$show_only" = 0 ] && [ "$reset" = 0 ] && [ -z "$token" ]; then
             printf 'Approved.\n' >&2 ;;
     esac
 fi
-
-if [ "$show_only" = 1 ]; then
-    printf 'ling      %s  ' "$new_ling";     probe "$new_ling"     ""           || true; printf '\n'
-    printf 'ling-mem  %s  ' "$new_ling_mem"; probe "$new_ling_mem" "$new_token" || true; printf '\n'
-    printf 'token     %s\n' "$([ -n "$new_token" ] && printf 'set' || printf '(none — loopback needs none)')"
-    printf 'config    %s\n' "$([ -r "$CLIENT_FILE" ] && printf '%s' "$CLIENT_FILE" || printf 'not written yet (defaults)')"
-    exit 0
-fi
-
-mkdir -p "$DATA_DIR" 2>/dev/null || die "config: cannot create $DATA_DIR"
-tmp="$CLIENT_FILE.tmp.$$"
-jq -n --arg l "$new_ling" --arg m "$new_ling_mem" --arg t "$new_token" --arg d "$device_id" \
-    '{ling: $l, ling_mem: $m, token: $t, device_id: $d}' > "$tmp" || die "config: could not write $tmp"
-mv "$tmp" "$CLIENT_FILE" || die "config: could not replace $CLIENT_FILE"
 
 # ── Mirror into Claude Code's env ───────────────────────────────────────────
 #
@@ -211,8 +167,6 @@ mirror_cc_env() {
     ' "$CC_SETTINGS" > "$tmp" 2>/dev/null && mv "$tmp" "$CC_SETTINGS"
 }
 
-mirrored=1
-mirror_cc_env || mirrored=0
 
 # ── Mirror into Codex's config.toml ─────────────────────────────────────────
 #
@@ -249,14 +203,123 @@ mirror_codex_toml() { # exit 2 = no Codex on this machine
     mv "$tmp" "$CODEX_CONFIG"
 }
 
+# ── State, drift, guidance ─────────────────────────────────────────────────
+
+is_local() { # $1 url — this machine?
+    local h="${1#*://}"; h="${h%%[:/]*}"
+    case "$h" in 127.0.0.1|localhost|::1|"") return 0 ;; *) return 1 ;; esac
+}
+host_of() { local h="${1#*://}"; printf '%s' "${h%%[:/]*}"; }
+
+state_of() { # $1 base, $2 token — ok | not_approved | no_answer | http_NNN
+    local code
+    code="$(mcp_code "$1" "${2:-}")"
+    case "$code" in
+        200) printf ok ;;
+        401|403) printf not_approved ;;
+        000|"") printf no_answer ;;
+        *) printf 'http_%s' "$code" ;;
+    esac
+}
+
+label() { # $1 state, $2 base — the line's verdict
+    case "$1" in
+        ok) local ver
+            ver="$(curl -fsS --max-time 4 --connect-timeout 2 "$2/api/health" 2>/dev/null \
+                | jq -r '.version // .data.version // empty' 2>/dev/null)"
+            printf 'ok%s' "$([ -n "$ver" ] && printf ' · %s' "$ver")" ;;
+        not_approved) printf 'not approved' ;;
+        no_answer) printf 'no answer' ;;
+        *) printf 'HTTP %s' "${1#http_}" ;;
+    esac
+}
+
+# What Claude Code's `.mcp.json` should see vs what its settings env holds.
+cc_env_want() {
+    local l="${new_ling#*://}" m="${new_ling_mem#*://}"
+    printf '%s %s %s %s %s' "${l%%:*}" "${l##*:}" "${m%%:*}" "${m##*:}" "$new_token"
+}
+cc_env_have() {
+    [ -r "$CC_SETTINGS" ] || { printf '127.0.0.1 9527 127.0.0.1 9528 '; return; }
+    jq -r '.env // {} | "\(.LINGGEN_HOST // "127.0.0.1") \(.LINGGEN_PORT // "9527") \(.LING_MEM_HOST // "127.0.0.1") \(.LING_MEM_PORT // "9528") \(.LING_MEM_TOKEN // "")"' \
+        "$CC_SETTINGS" 2>/dev/null
+}
+cc_env_drifted() { # no Claude Code here → nothing to drift
+    [ -d "$(dirname "$CC_SETTINGS")" ] || return 1
+    [ "$(cc_env_want)" != "$(cc_env_have)" ]
+}
+
+next_step() { # $1 ling state, $2 ling-mem state
+    if cc_env_drifted; then
+        echo "Next: run /linggen:config --ling-mem ${new_ling_mem#*://}, then restart Claude Code."
+    elif [ "$2" = not_approved ]; then
+        echo "Next: run /linggen:config --ling-mem ${new_ling_mem#*://} and click Allow on $(host_of "$new_ling_mem")."
+    elif [ "$2" = no_answer ] && is_local "$new_ling_mem"; then
+        echo "Next: ling-mem is not running here. Start it: ling-mem start"
+    elif [ "$2" = no_answer ]; then
+        echo "Next: nothing answers at $(host_of "$new_ling_mem"). Check it is on and shared on LAN."
+    elif [ "$1" = no_answer ] && is_local "$new_ling"; then
+        echo "Next: Linggen is not running here. Start it: ling --web (or open Linggen.app)."
+    elif [ "$1" = not_approved ]; then
+        echo "Next: Linggen on $(host_of "$new_ling") has not approved this machine."
+    elif is_local "$new_ling_mem"; then
+        echo "All set. Change settings at http://localhost:9527/settings"
+    else
+        echo "All set: memory comes from $(host_of "$new_ling_mem")."
+        is_local "$new_ling" && echo "Change settings at http://localhost:9527/settings"
+    fi
+    return 0
+}
+
+guide() {
+    local ls ms
+    ls="$(state_of "$new_ling" "$new_token")"
+    ms="$(state_of "$new_ling_mem" "$new_token")"
+    printf 'ling      %s  %s\n' "$new_ling" "$(label "$ls" "$new_ling")"
+    printf 'ling-mem  %s  %s\n' "$new_ling_mem" "$(label "$ms" "$new_ling_mem")"
+    printf '\n'
+    next_step "$ls" "$ms"
+    printf '\nCommon:\n'
+    printf '  /linggen:config --ling-mem <ip>:9528   use memory on another machine\n'
+    printf '  /linggen:config --local                use this machine again\n'
+    printf '  /linggen:config                        check again\n'
+}
+
+if [ "$show_only" = 1 ]; then
+    guide
+    exit 0
+fi
+
+write_client() {
+    mkdir -p "$DATA_DIR" 2>/dev/null || die "config: cannot create $DATA_DIR"
+    local tmp="$CLIENT_FILE.tmp.$$"
+    jq -n --arg l "$new_ling" --arg m "$new_ling_mem" --arg t "$new_token" --arg d "$device_id" \
+        '{ling: $l, ling_mem: $m, token: $t, device_id: $d}' > "$tmp" || die "config: could not write $tmp"
+    chmod 600 "$tmp" 2>/dev/null || true
+    mv "$tmp" "$CLIENT_FILE" || die "config: could not replace $CLIENT_FILE"
+}
+# `--mirror` re-mirrors what client.json already says; it never rewrites it.
+[ "$mirror_only" = 1 ] || write_client
+
+# `--mirror` (the SessionStart hook): exit 0 when Claude Code's env changed
+# and needs a restart, 10 when it already matched.
+if [ "$mirror_only" = 1 ]; then
+    mirror_codex_toml >/dev/null 2>&1 || true
+    cc_env_drifted || exit 10
+    mirror_cc_env || exit 1
+    exit 0
+fi
+
+mirrored=1
+mirror_cc_env || mirrored=0
 codex_mirrored=1
 mirror_codex_toml || codex_mirrored=$?
 
 # ── Report ──────────────────────────────────────────────────────────────────
 
 printf 'wrote %s\n\n' "$CLIENT_FILE"
-printf 'ling      %s  ' "$new_ling";     probe "$new_ling"     ""           || true; printf '\n'
-printf 'ling-mem  %s  ' "$new_ling_mem"; probe "$new_ling_mem" "$new_token" || true; printf '\n'
+printf 'ling      %s  %s\n' "$new_ling" "$(label "$(state_of "$new_ling" "$new_token")" "$new_ling")"
+printf 'ling-mem  %s  %s\n' "$new_ling_mem" "$(label "$(state_of "$new_ling_mem" "$new_token")" "$new_ling_mem")"
 printf '\n'
 
 if [ "$mirrored" = 1 ]; then

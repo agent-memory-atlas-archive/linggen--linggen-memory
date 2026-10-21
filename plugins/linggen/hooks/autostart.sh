@@ -166,6 +166,20 @@ if ! curl -fsS --max-time 2 "${LINGGEN_URL}/api/health" >/dev/null 2>&1 \
   fi
 fi
 
+# ── Keep Claude Code's MCP wiring in step with client.json ──────────────────
+#
+# `.mcp.json` reads env that Claude Code expanded at startup; client.json is
+# the authority (the engine's Settings page writes it too). When they differ,
+# re-mirror through config.sh — the one writer — and say a restart applies it.
+
+mirror_hint=""
+if [ "$PLUGIN_AGENT" = cc ] && [ -r "$_ling_client_file" ]; then
+  # Exit 0: the env was out of step and is now rewritten; 10: already matched.
+  if bash "$PLUGIN_ROOT/scripts/config.sh" --mirror >/dev/null 2>&1; then
+    mirror_hint="ling-mem address changed — restart Claude Code to apply."
+  fi
+fi
+
 # ── Inject what a session loads at start ────────────────────────────────────
 #
 # One call: `memory_session_start` with this session's cwd and root returns
@@ -223,11 +237,12 @@ else
   fi
 fi
 
-if [ -n "$install_hint" ]; then
+for hint in "$mirror_hint" "$install_hint"; do
+  [ -n "$hint" ] || continue
   core_block="${core_block}${core_block:+
 
-}${install_hint}"
-fi
+}${hint}"
+done
 [ -z "$core_block" ] && exit 0
 
 jq -nc --arg ctx "$core_block" '{

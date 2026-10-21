@@ -13,12 +13,14 @@
 #
 #   { "ling": "http://…:9527", "ling_mem": "http://…:9528", "token": "…" }
 #
-# Precedence is env > file > default. Env first because `.mcp.json` can only
-# ever be given an environment variable — Claude Code expands it at startup,
-# before any hook runs — so an env override has to mean the same thing here as
-# it does there. Codex expands nothing in a URL: its declaration is the literal
-# loopback `.codex-plugin/mcp.json`, and `config.sh` overrides it from
-# config.toml when this host points elsewhere.
+# Precedence is file > env > default: client.json is the one authority (the
+# engine's Settings and `/linggen:config` both write it). Env is only a
+# fallback for a host with no file. `.mcp.json` can only be given environment
+# variables — Claude Code expands it at startup, before any hook runs — so
+# `config.sh` mirrors the file into Claude Code's settings env, and the
+# SessionStart hook re-mirrors it when the two drift. Codex expands nothing in
+# a URL: its declaration is the literal loopback `.codex-plugin/mcp.json`, and
+# `config.sh` overrides it from config.toml when this host points elsewhere.
 
 # ── Where ───────────────────────────────────────────────────────────────────
 
@@ -37,11 +39,13 @@ _ling_host_of() { local u="${1#*://}"; printf '%s' "${u%%:*}"; }
 _ling_port_of() { local u="${1#*://}"; u="${u##*:}"; printf '%s' "${u%%/*}"; }
 
 _ling_resolve() { # $1 host-env $2 port-env $3 client-key $4 default-host $5 default-port
-    local h="$1" p="$2" from_file
+    local h="" p="" from_file
     from_file="$(_ling_client_get "$3")"
-    if [ -z "$h" ] && [ -n "$from_file" ]; then h="$(_ling_host_of "$from_file")"; fi
-    if [ -z "$p" ] && [ -n "$from_file" ]; then p="$(_ling_port_of "$from_file")"; fi
-    printf '%s %s' "${h:-$4}" "${p:-$5}"
+    if [ -n "$from_file" ]; then
+        h="$(_ling_host_of "$from_file")"
+        p="$(_ling_port_of "$from_file")"
+    fi
+    printf '%s %s' "${h:-${1:-$4}}" "${p:-${2:-$5}}"
 }
 
 # shellcheck disable=SC2046
@@ -66,7 +70,8 @@ _ling_is_local "$LING_MEM_HOST" && LING_MEM_LOCAL=1 || LING_MEM_LOCAL=0
 
 # Off-machine, ling-mem's LAN gate wants a paired device's token; loopback needs
 # none, so a normal single-machine install sets nothing.
-LING_MEM_TOKEN="${LING_MEM_TOKEN:-$(_ling_client_get token)}"
+_ling_file_token="$(_ling_client_get token)"
+LING_MEM_TOKEN="${_ling_file_token:-${LING_MEM_TOKEN:-}}"
 _ling_mem_auth=()
 [ -n "$LING_MEM_TOKEN" ] && _ling_mem_auth=(-H "x-linggen-device: ${LING_MEM_TOKEN}")
 
