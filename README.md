@@ -8,7 +8,7 @@ Tell Claude Code something on Monday; Codex knows it on Tuesday. One local daemo
 
 **It works on its own.** Install it into the agents you already use and stop there if you like. It is also the memory of [Linggen](https://linggen.dev) — so if you ever meet Yinyue, the companion there, she already knows you on day one.
 
-> **Status: stable — latest release 1.13.0.** Store schema and the CLI/HTTP/MCP contract are frozen. Prebuilt binaries for macOS Apple Silicon and Linux (x86_64, aarch64; glibc 2.38+, Ubuntu 24.04+). The pre-refactor code-indexing tool is preserved at the `v0-legacy` git tag.
+> **Status: stable — latest release 1.13.0.** Store schema and the CLI/HTTP/MCP contract are frozen. Prebuilt binaries for macOS Apple Silicon and Linux (x86_64, aarch64; glibc 2.39+, Ubuntu 24.04+). The pre-refactor code-indexing tool is preserved at the `v0-legacy` git tag.
 
 ---
 
@@ -124,7 +124,7 @@ The `ling-mem` binary is fetched automatically on first use (pinned, SHA-256 ver
 bash <(curl -fsSL https://raw.githubusercontent.com/linggen/linggen-memory/main/plugins/linggen/scripts/install-bin.sh) --version '^1'
 ```
 
-Prebuilt binaries for macOS Apple Silicon and Linux (x86_64, aarch64; glibc 2.38+ — Ubuntu 24.04 or newer) are on the [releases page](https://github.com/linggen/linggen-memory/releases).
+Prebuilt binaries for macOS Apple Silicon and Linux (x86_64, aarch64; glibc 2.39+ — Ubuntu 24.04 or newer) are on the [releases page](https://github.com/linggen/linggen-memory/releases).
 
 To build from source instead:
 

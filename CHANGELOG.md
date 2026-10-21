@@ -23,7 +23,7 @@ Plugin manifests: CC/Codex 1.7.20, OpenClaw 0.1.12.
 
 ### Changed
 
-- Linux builds on Ubuntu 24.04: the Linux binaries need glibc 2.38+
+- Linux builds on Ubuntu 24.04: the Linux binaries need glibc 2.39+
   (Ubuntu 24.04 or newer).
 
 ## [1.12.0] - 2026-10-21 — every machine keeps its own copy
