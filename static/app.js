@@ -2384,11 +2384,11 @@ async function restartForNetwork(row, button) {
 
 // The daemon goes away and comes back: wait for it to go, then to answer.
 async function waitForRestart() {
-  await pollHealth(false, 20);
-  if (!(await pollHealth(true, 40))) throw new Error('the daemon did not come back');
+  await waitForHealth(false, 20);
+  if (!(await waitForHealth(true, 40))) throw new Error('the daemon did not come back');
 }
 
-async function pollHealth(wantUp, tries) {
+async function waitForHealth(wantUp, tries) {
   for (let i = 0; i < tries; i++) {
     if ((await healthOk()) === wantUp) return true;
     await new Promise((r) => setTimeout(r, 500));
