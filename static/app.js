@@ -2237,7 +2237,7 @@ async function buildSettingsCard() {
     <div class="settings-row settings-devices"></div>
     <div class="settings-actions">
       <button type="button" class="settings-save">Save</button>
-      <button type="button" class="settings-cancel">Cancel</button>
+      <button type="button" class="settings-cancel" data-role="cancel">Cancel</button>
     </div>
     <p class="settings-status" hidden></p>
   `;
@@ -2245,7 +2245,7 @@ async function buildSettingsCard() {
   await loadNetworkRow(card.querySelector('.settings-network'));
   await loadDevicesRow(card.querySelector('.settings-devices'));
   card.querySelector('.help-close').addEventListener('click', closeSettings);
-  card.querySelector('.settings-cancel').addEventListener('click', closeSettings);
+  card.querySelector('[data-role="cancel"]').addEventListener('click', closeSettings);
   card.querySelector('.settings-save').addEventListener('click', async () => {
     const status = card.querySelector('.settings-status');
     const ttl = parseInt(card.querySelector('#settings-ttl').value, 10);
