@@ -285,8 +285,8 @@ guide() {
     [ -n "$role" ] && printf 'memory    %s\n' "$(role_line "$role")"
     printf '\n'
     if ! is_local "$new_ling_mem"; then
-        echo "Next: run /linggen:config --primary ${new_ling_mem#*://}, then /linggen:config --local."
-        echo "(This machine keeps its own copy and works offline.)"
+        echo "Next: /linggen:config --local, restart Claude Code, then /linggen:config --primary ${new_ling_mem#*://}."
+        echo "(This machine then keeps its own copy and works offline.)"
     elif [ -n "$role" ] && [ -n "$(role_next "$role")" ]; then
         role_next "$role"
     else
@@ -334,7 +334,7 @@ set_primary() { # $1 host:port | local
     local reply role i
     reply="$(curl -sS --max-time 10 -X PUT -H 'Content-Type: application/json' \
         -d "$(jq -nc --arg p "$1" '{primary: $p}')" "$LOCAL_MEM/api/sync/primary" 2>/dev/null)" \
-        || die "config: ling-mem is not running here. Start it: ling-mem start"
+        || die "config: ling-mem is not running here. Run /linggen:config --local, restart Claude Code, then retry."
     printf '%s' "$reply" | jq -e '.ok' >/dev/null 2>&1 \
         || die "config: $(printf '%s' "$reply" | jq -r '.error // "refused"')"
     role="$(printf '%s' "$reply" | jq -c '.data')"
