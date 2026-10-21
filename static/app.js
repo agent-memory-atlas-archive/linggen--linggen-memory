@@ -2545,7 +2545,8 @@ function renderDevicesRow(row, devices, denied) {
   const parts = [devicesLabel('Connected devices')];
   if (!devices.length) parts.push(networkHint('None yet. Other machines ask from /linggen:config.'));
   for (const d of devices) {
-    parts.push(deviceLine(`${d.name} · ${d.ip} · since ${formatDay(d.allowed_at)}`, 'Revoke',
+    const seen = d.online ? 'online' : fmtSeen(d.last_seen);
+    parts.push(deviceLine(`${d.name} · ${d.ip} · ${d.kind} · ${seen} · since ${formatDay(d.allowed_at)}`, 'Revoke',
       () => connectApi(`devices/${encodeURIComponent(d.id)}`, 'DELETE')));
   }
   if (denied.length) parts.push(devicesLabel('Denied'));
