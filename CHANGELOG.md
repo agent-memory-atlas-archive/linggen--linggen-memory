@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.10.0] - 2026-10-21 — one store on the LAN
+
+Plugin manifests: CC/Codex 1.7.16, OpenClaw 0.1.11.
+
+### Changed
+
+- **The daemon listens on the LAN (`0.0.0.0`) by default.** Off-machine
+  requests still need a paired device's token; with nothing paired, every
+  one is refused. A fresh install no longer refuses to start on a wide bind.
+- **The bind is decided inside `serve`:** `--host` if typed, else the saved
+  network setting, else the LAN. No starter passes `--host` any more, and
+  `install-bin.sh` keeps a daemon's typed `--host` only when it had one.
+
+### Added
+
+- **Settings → Network in the console:** "Shared on LAN (default)" or "This
+  machine only", the bound address shown, and a restart to apply.
+  `GET`/`PUT /api/network`, `POST /api/network/restart` — writes from
+  loopback only (403 otherwise); `PUT /api/config` keeps the stored choice.
+- **Plugin `.mcp.json` sends `x-linggen-device: ${LING_MEM_TOKEN}`** to
+  ling-mem, so a second machine's MCP memory tools pass the LAN gate.
+
 ## [1.9.1] - 2026-10-05 — scope and index (`doc/scope-index-spec.md`)
 
 1.9.0 was never published; its entry below ships in 1.9.1. Plugin

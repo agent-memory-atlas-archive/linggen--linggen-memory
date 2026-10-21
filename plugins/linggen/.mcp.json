@@ -6,7 +6,10 @@
     },
     "ling-mem": {
       "type": "http",
-      "url": "http://${LING_MEM_HOST:-127.0.0.1}:${LING_MEM_PORT:-9528}/mcp"
+      "url": "http://${LING_MEM_HOST:-127.0.0.1}:${LING_MEM_PORT:-9528}/mcp",
+      "headers": {
+        "x-linggen-device": "${LING_MEM_TOKEN:-}"
+      }
     }
   }
 }

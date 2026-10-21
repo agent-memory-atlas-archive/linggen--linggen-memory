@@ -246,7 +246,7 @@ json_field() { # key — the first "key": value in the JSON on stdin (no jq on a
     | sed -E 's/^"[^"]*"[[:space:]]*:[[:space:]]*"?([^"]*)"?$/\1/'; } || true
 }
 older_than() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -n1)" = "$1" ]; }
-bind_host_of() { # pid → the --host it was started with (default loopback)
+bind_host_of() { # pid → the --host it was started with (none: the saved setting binds)
   { ps -o args= -p "$1" 2>/dev/null | sed -nE 's/.*--host[ =]([^ ]+).*/\1/p' | head -n1; } || true
 }
 listener_pid() { # port → pid listening there (never a client of it)
@@ -278,7 +278,7 @@ restart_running_daemon() {
     kill "$pid" 2>/dev/null || true
     for _ in 1 2 3 4 5 6 7 8 9 10; do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
   fi
-  "$BIN" restart --port "${port:-9528}" --host "${host:-127.0.0.1}" >/dev/null 2>&1 \
+  "$BIN" restart --port "${port:-9528}" ${host:+--host "$host"} >/dev/null 2>&1 \
     || echo "install-bin: the ling-mem daemon did not restart on the new binary — run: ling-mem restart" >&2
 }
 restart_running_daemon

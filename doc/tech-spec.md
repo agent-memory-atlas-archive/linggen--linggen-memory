@@ -320,12 +320,11 @@ Release profile: `strip = true`, `lto = "thin"`, `codegen-units = 1`.
 
 ## Network exposure
 
-The daemon binds **loopback** and nothing else. That is the whole story for the ordinary user: one machine, memory for that machine's agents, no port on the network and nothing to configure.
+The daemon binds the **LAN** (`0.0.0.0`) by default. The case it exists for: a second machine on the LAN whose agents should share ONE memory rather than growing their own binary, daemon, and store, which forks the user's biography.
 
-`--host` widens it, for the one case that is real — a second machine on the LAN whose agents should share ONE memory rather than growing their own binary, daemon, and store, which forks the user's biography. Two rules make that safe, and the second is why the first exists:
+The bind is resolved inside `serve`, so no starter (plugin hook, engine, bare `ling-mem restart`) passes one: an explicit `--host` flag wins, then the `network` field of `<data_dir>/memory/.config.json` (`"lan"` | `"local"`), then `0.0.0.0`. The console sets it under Settings → Network (`GET`/`PUT /api/network`); only loopback may write it, and `PUT /api/config` keeps the stored value. A change applies on restart — `POST /api/network/restart` (loopback only) spawns `ling-mem restart`.
 
-1. **A wide bind is refused unless this machine has paired devices** (`<data_dir>/paired-devices.json` exists). Opening a port before there is anything to check a caller against is an open store; the daemon fails to start instead, saying so.
-2. **A non-loopback request must carry a paired device's token** in `x-linggen-device`. Loopback passes straight through — the CLI, the Linggen engine, and the local app all talk to `127.0.0.1`, and a process already on this machine is inside the fence. `/api/health` stays open either way: it is a liveness probe carrying a version and nothing about the user.
+One rule makes the open port safe: **a non-loopback request must carry a paired device's token** in `x-linggen-device`. Loopback passes straight through — the CLI, the Linggen engine, and the local app all talk to `127.0.0.1`, and a process already on this machine is inside the fence. `/api/health` stays open: it is a liveness probe carrying a version and nothing about the user. A machine that never paired anything (`<data_dir>/paired-devices.json` absent) has no tokens, so every off-machine request is refused — the port is open, the store is not.
 
 **The auth is not new.** Both daemons live under the same `~/.linggen`, so this reads the very file Linggen's pairing flow writes — pair once, on the Mac's screen, and both daemons accept that device. Nothing here mints a token; `src/http/gate.rs` only ever reads.
 

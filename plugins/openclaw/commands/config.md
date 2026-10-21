@@ -23,8 +23,9 @@ Then, in one or two lines:
   machine that holds the store (its screen shows a code), then re-run with
   `--token <token>`.
 - If a probe says `no answer`, nothing is listening there — on the local
-  machine, the daemon may simply be down; on another machine, `ling-mem` must
-  have been started with `--host` to accept anything but loopback.
+  machine, the daemon may simply be down; on another machine, it may be set to
+  "This machine only" (ling-mem console → Settings → Network), or a firewall
+  blocks the port.
 
 Usage the user may not know:
 

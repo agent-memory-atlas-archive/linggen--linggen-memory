@@ -668,6 +668,17 @@ input[type="text"]:disabled { opacity: 0.6; }
   border-radius: 6px;
   width: 120px;
 }
+.settings-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-row .settings-choice {
+  font-size: 13px;
+  color: var(--text);
+  cursor: pointer;
+}
+.settings-restart { margin-top: 4px; }
 .settings-hint {
   margin: 0;
   font-size: 12px;

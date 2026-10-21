@@ -31,8 +31,9 @@ reach before installing:
 - **Session-log backfill** (`/linggen-scan`, user-triggered only): reads local
   agent transcripts to stage durable memories; secret-filtered, never
   automatic.
-- **LAN reach is opt-in**: daemons bind loopback; widening to a second
-  machine requires explicit pairing (`/linggen-config`).
+- **LAN reach needs pairing**: ling-mem listens on the LAN by default, but
+  answers another machine only once it is paired (`/linggen-config`); the
+  console's Settings → Network can make it this machine only.
 
 Nothing phones home: telemetry is anonymous counts with strict no-content
 rules ([privacy](https://linggen.dev/privacy)), and `LINGGEN_NO_TELEMETRY=1`

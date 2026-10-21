@@ -2155,9 +2155,10 @@ function onHelpBackdropClick(e) {
 }
 
 // ── Settings modal ─────────────────────────────────────────────────
-// Reads + writes /api/config (currently just episodic_ttl_days). Read
+// Reads + writes /api/config (episodic TTL, recall threshold). Read
 // path is also used by the dream pass on every host — keep the schema
-// minimal and forward-compatible.
+// minimal and forward-compatible. The network choice has its own route
+// (/api/network): it changes only from this machine and applies on restart.
 
 function isSettingsOpen() {
   return !document.getElementById('settings-overlay').hidden;
@@ -2230,12 +2231,14 @@ async function buildSettingsCard() {
         Default 0.6. Higher = stricter (fewer, more relevant); lower = broader.
       </p>
     </div>
+    <div class="settings-row settings-network"></div>
     <div class="settings-actions">
       <button type="button" class="settings-save">Save</button>
       <button type="button" class="settings-cancel">Cancel</button>
     </div>
     <p class="settings-status" hidden></p>
   `;
+  await loadNetworkRow(card.querySelector('.settings-network'));
   card.querySelector('.help-close').addEventListener('click', closeSettings);
   card.querySelector('.settings-cancel').addEventListener('click', closeSettings);
   card.querySelector('.settings-save').addEventListener('click', async () => {
@@ -2269,6 +2272,132 @@ async function buildSettingsCard() {
     }
   });
   return card;
+}
+
+// ── Network (inside Settings) ──────────────────────────────────────
+// Shared on the LAN (default) or this machine only. Picking one saves it at
+// once; the bound address is shown as a fact, and a restart applies a change.
+
+const NETWORK_CHOICES = [
+  ['lan', 'Shared on LAN (default)'],
+  ['local', 'This machine only'],
+];
+
+async function fetchNetwork(init) {
+  const resp = await fetch('/api/network', init);
+  const json = await resp.json();
+  if (!json?.ok) throw new Error(json?.error ?? `HTTP ${resp.status}`);
+  return json.data;
+}
+
+async function loadNetworkRow(row) {
+  try {
+    renderNetworkRow(row, await fetchNetwork());
+  } catch (err) {
+    row.replaceChildren(networkLabel(), networkHint(`Network unavailable: ${err.message}`));
+  }
+}
+
+function networkLabel() {
+  const label = document.createElement('label');
+  label.textContent = 'Network';
+  return label;
+}
+
+function networkHint(text) {
+  const p = document.createElement('p');
+  p.className = 'settings-hint';
+  p.textContent = text;
+  return p;
+}
+
+function renderNetworkRow(row, net) {
+  const choices = document.createElement('div');
+  choices.className = 'settings-choices';
+  for (const [value, text] of NETWORK_CHOICES) {
+    choices.appendChild(networkChoice(row, net, value, text));
+  }
+  const parts = [networkLabel(), choices, networkHint(`Listening on ${net.bound}`)];
+  if (net.network === 'lan' && !net.paired_devices) {
+    parts.push(networkHint('No paired devices yet, so other machines are refused.'));
+  }
+  if (!net.applied) parts.push(networkRestart(row));
+  row.replaceChildren(...parts);
+}
+
+function networkChoice(row, net, value, text) {
+  const label = document.createElement('label');
+  label.className = 'settings-choice';
+  const input = document.createElement('input');
+  input.type = 'radio';
+  input.name = 'settings-network';
+  input.value = value;
+  input.checked = net.network === value;
+  input.addEventListener('change', () => saveNetwork(row, value));
+  label.append(input, ` ${text}`);
+  return label;
+}
+
+async function saveNetwork(row, value) {
+  try {
+    renderNetworkRow(row, await fetchNetwork({
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ network: value }),
+    }));
+  } catch (err) {
+    row.appendChild(networkHint(`Not saved: ${err.message}`));
+  }
+}
+
+function networkRestart(row) {
+  const wrap = document.createElement('div');
+  wrap.className = 'settings-restart';
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'settings-save';
+  button.textContent = 'Restart to apply';
+  button.addEventListener('click', () => restartForNetwork(row, button));
+  wrap.appendChild(button);
+  return wrap;
+}
+
+async function restartForNetwork(row, button) {
+  button.disabled = true;
+  button.textContent = 'Restarting…';
+  try {
+    const resp = await fetch('/api/network/restart', { method: 'POST' });
+    const json = await resp.json();
+    if (!json?.ok) throw new Error(json?.error ?? `HTTP ${resp.status}`);
+    await waitForRestart();
+    await loadNetworkRow(row);
+  } catch (err) {
+    button.disabled = false;
+    button.textContent = 'Restart to apply';
+    row.appendChild(networkHint(`Restart failed: ${err.message}`));
+  }
+}
+
+// The daemon goes away and comes back: wait for it to go, then to answer.
+async function waitForRestart() {
+  await pollHealth(false, 20);
+  if (!(await pollHealth(true, 40))) throw new Error('the daemon did not come back');
+}
+
+async function pollHealth(wantUp, tries) {
+  for (let i = 0; i < tries; i++) {
+    if ((await healthOk()) === wantUp) return true;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  return false;
+}
+
+async function healthOk() {
+  try {
+    return (await fetch('/api/health', { cache: 'no-store' })).ok;
+  } catch {
+    return false;
+  }
 }
 
 function buildHelpCard() {
