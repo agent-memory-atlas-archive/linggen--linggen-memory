@@ -2018,6 +2018,7 @@ function handleEscape(e) {
   if (isHelpOpen()) { e.preventDefault(); closeHelp(); return; }
   const menuOpen = !document.getElementById('bulk-menu').hidden;
   if (menuOpen)              { e.preventDefault(); closeBulkMenu(); return; }
+  if (!document.getElementById('devices-menu').hidden) { e.preventDefault(); closeDevicesMenu(); return; }
   if (isEditableFocused())   { document.activeElement.blur(); return; }
   if (state.selectedId || state.draft) {
     e.preventDefault();
@@ -2576,6 +2577,87 @@ function formatDay(secs) {
 pollConnect();
 setInterval(pollConnect, CONNECT_POLL_MS);
 document.addEventListener('visibilitychange', pollConnect);
+
+// ── Devices pill ──────────────────────────────────────────────────
+// How many paired machines the gate saw lately. Facts from
+// /api/connect/devices; this machine's own clients are not devices.
+
+const DEVICES_POLL_MS = 10_000;
+let lastDevices = { devices: [], summary: { connected: 0, total: 0 } };
+
+async function pollDevicePresence() {
+  if (document.hidden) return;
+  try {
+    lastDevices = await connectApi('devices');
+  } catch {
+    lastDevices = { devices: [], summary: { connected: 0, total: 0 } };
+  }
+  renderDevicesPill();
+  if (!document.getElementById('devices-menu').hidden) renderDevicesMenu();
+}
+
+function renderDevicesPill() {
+  const { connected, total } = lastDevices.summary;
+  const wrap = document.getElementById('devices-wrap');
+  wrap.hidden = total === 0;
+  if (!total) return closeDevicesMenu();
+  const n = connected || total;
+  const pill = document.getElementById('devices-pill');
+  pill.className = connected ? 'health ok' : 'health unknown';
+  pill.textContent = `⇄ ${n} device${n === 1 ? '' : 's'}`;
+  pill.title = `${connected} of ${total} online`;
+}
+
+function fmtSeen(secs) {
+  if (!secs) return 'not seen yet';
+  const m = (Date.now() / 1000 - secs) / 60;
+  if (m < 60) return `last seen ${Math.max(1, Math.round(m))} min ago`;
+  if (m < 48 * 60) return `last seen ${Math.round(m / 60)}h ago`;
+  return `last seen ${Math.round(m / 1440)}d ago`;
+}
+
+function presenceLine(d) {
+  const line = document.createElement('div');
+  line.className = 'devices-item';
+  const what = document.createElement('span');
+  what.textContent = `${d.name} · ${d.ip} · ${d.kind}`;
+  const when = document.createElement('span');
+  when.className = d.online ? 'when online' : 'when';
+  when.textContent = d.online ? 'online' : fmtSeen(d.last_seen);
+  line.append(what, when);
+  return line;
+}
+
+function renderDevicesMenu() {
+  const menu = document.getElementById('devices-menu');
+  const manage = document.createElement('button');
+  manage.type = 'button';
+  manage.className = 'bulk-item devices-manage';
+  manage.textContent = 'Revoke in Settings';
+  manage.addEventListener('click', () => { closeDevicesMenu(); openSettings(); });
+  menu.replaceChildren(...lastDevices.devices.map(presenceLine), manage);
+}
+
+function toggleDevicesMenu() {
+  const menu = document.getElementById('devices-menu');
+  if (!menu.hidden) return closeDevicesMenu();
+  renderDevicesMenu();
+  menu.hidden = false;
+  document.getElementById('devices-pill').setAttribute('aria-expanded', 'true');
+}
+
+function closeDevicesMenu() {
+  document.getElementById('devices-menu').hidden = true;
+  document.getElementById('devices-pill').setAttribute('aria-expanded', 'false');
+}
+
+document.getElementById('devices-pill').addEventListener('click', toggleDevicesMenu);
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('#devices-wrap')) closeDevicesMenu();
+});
+pollDevicePresence();
+setInterval(pollDevicePresence, DEVICES_POLL_MS);
+document.addEventListener('visibilitychange', pollDevicePresence);
 
 function buildHelpCard() {
   const card = document.createElement('div');

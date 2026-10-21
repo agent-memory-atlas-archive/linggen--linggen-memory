@@ -160,6 +160,36 @@ input[type="text"]:disabled { opacity: 0.6; }
 .health.offline { color: var(--err);  border-color: color-mix(in srgb, var(--err) 40%, var(--border)); }
 .health.unknown { color: var(--text-dim); }
 
+/* ── Devices pill ──────────────────────────────────────── */
+
+#devices-wrap { position: relative; }
+#devices-wrap[hidden] { display: none; }
+#devices-pill { font: inherit; font-size: 12px; cursor: pointer; }
+#devices-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 340px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-menu);
+  padding: 4px;
+  z-index: 10;
+}
+#devices-menu[hidden] { display: none; }
+.devices-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 6px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+.devices-item .when { color: var(--text-dim); white-space: nowrap; }
+.devices-item .when.online { color: var(--ok); }
+.devices-manage { justify-content: flex-start; color: var(--accent); border-top: 1px solid var(--border); margin-top: 4px; }
+
 #query-bar {
   display: flex;
   gap: 8px;
