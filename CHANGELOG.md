@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.13.0] - 2026-10-21 — see who is connected
+
+1.10.0–1.12.0 were never published; their entries below ship in 1.13.0.
+Plugin manifests: CC/Codex 1.7.20, OpenClaw 0.1.12.
+
+### Added
+
+- **Console: a devices pill** in the header — paired machines the gate has
+  seen, online or last seen. Settings → Connected devices rows say replica
+  or client and online or last seen.
+
+### Fixed
+
+- First start on a fresh data dir creates its skill dir; a legacy host
+  migrates `--local` first.
+- The console page broke on a duplicate `pollHealth`; CI now runs
+  `node --check` on the console scripts.
+- Replica pulls wait up to 60 s and log why one failed.
+- Revoke no longer closes Settings.
+- `/linggen:config` names the next step when ling-mem is not running here.
+
+### Changed
+
+- Linux builds on Ubuntu 24.04: the Linux binaries need glibc 2.38+
+  (Ubuntu 24.04 or newer).
+
 ## [1.12.0] - 2026-10-21 — every machine keeps its own copy
 
 Plugin manifests: CC/Codex 1.7.19, OpenClaw 0.1.12.
