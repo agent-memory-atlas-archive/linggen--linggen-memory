@@ -39,10 +39,11 @@ engine no longer proxies `memory_*`.
 anything:
 
 ```
-/linggen:config --ling-mem 192.168.1.5:9528 --token <device-token>
+/linggen:config --ling-mem 192.168.1.5:9528
 ```
 
-That writes `~/.linggen/client.json` — where *this* host goes looking — probes
+It asks that machine to connect; click Allow there (Linggen or the ling-mem
+console) and the device token arrives on its own. That writes `~/.linggen/client.json` — where *this* host goes looking — probes
 the address, and mirrors it into Claude Code's `settings.json` so the MCP
 servers follow. Restart Claude Code afterwards; MCP URLs resolve at startup.
 Nothing is installed locally: the hooks speak MCP over HTTP and the tools come

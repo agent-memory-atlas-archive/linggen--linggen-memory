@@ -2232,6 +2232,7 @@ async function buildSettingsCard() {
       </p>
     </div>
     <div class="settings-row settings-network"></div>
+    <div class="settings-row settings-devices"></div>
     <div class="settings-actions">
       <button type="button" class="settings-save">Save</button>
       <button type="button" class="settings-cancel">Cancel</button>
@@ -2239,6 +2240,7 @@ async function buildSettingsCard() {
     <p class="settings-status" hidden></p>
   `;
   await loadNetworkRow(card.querySelector('.settings-network'));
+  await loadDevicesRow(card.querySelector('.settings-devices'));
   card.querySelector('.help-close').addEventListener('click', closeSettings);
   card.querySelector('.settings-cancel').addEventListener('click', closeSettings);
   card.querySelector('.settings-save').addEventListener('click', async () => {
@@ -2399,6 +2401,125 @@ async function healthOk() {
     return false;
   }
 }
+
+// ── Connect requests ───────────────────────────────────────────────
+// A machine on the LAN asks to share this memory; Allow or Deny here. The
+// routes answer only this machine, so a console opened from elsewhere sees
+// nothing to approve.
+
+const CONNECT_POLL_MS = 3000;
+
+async function connectApi(path, method = 'GET') {
+  const resp = await fetch(`/api/connect/${path}`, { method });
+  const json = await resp.json();
+  if (!json?.ok) throw new Error(json?.error ?? `HTTP ${resp.status}`);
+  return json.data;
+}
+
+async function pollConnect() {
+  if (document.hidden) return;
+  try {
+    const { pending } = await connectApi('pending');
+    renderConnectBanner(pending);
+  } catch {
+    renderConnectBanner(null);
+  }
+}
+
+function renderConnectBanner(pending) {
+  const banner = document.getElementById('connect-banner');
+  if (!pending) {
+    banner.hidden = true;
+    banner.replaceChildren();
+    delete banner.dataset.id;
+    return;
+  }
+  if (banner.dataset.id === pending.id) return;
+  banner.dataset.id = pending.id;
+  const text = document.createElement('span');
+  text.textContent = `${pending.device_name} (${pending.ip}) wants to share memory.`;
+  const parts = [text];
+  if (pending.known) parts.push(networkHint('Allowed before; it lost its key.'));
+  parts.push(connectButton('Allow', 'settings-save', () => decideConnect(pending.id, 'allow')));
+  parts.push(connectButton('Deny', 'settings-cancel', () => decideConnect(pending.id, 'deny')));
+  banner.replaceChildren(...parts);
+  banner.hidden = false;
+}
+
+function connectButton(label, cls, onClick) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = cls;
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+async function decideConnect(id, verdict) {
+  try {
+    await connectApi(`${encodeURIComponent(id)}/${verdict}`, 'POST');
+  } catch { /* expired or replaced: the next poll shows the truth */ }
+  renderConnectBanner(null);
+  const row = document.querySelector('.settings-devices');
+  if (row) loadDevicesRow(row);
+  pollConnect();
+}
+
+// Settings → Connected devices / Denied.
+async function loadDevicesRow(row) {
+  try {
+    const [{ devices }, { denied }] = await Promise.all([
+      connectApi('devices'),
+      connectApi('denied'),
+    ]);
+    renderDevicesRow(row, devices, denied);
+  } catch (err) {
+    row.replaceChildren(devicesLabel('Connected devices'), networkHint(`Unavailable: ${err.message}`));
+  }
+}
+
+function devicesLabel(text) {
+  const label = document.createElement('label');
+  label.textContent = text;
+  return label;
+}
+
+function renderDevicesRow(row, devices, denied) {
+  const parts = [devicesLabel('Connected devices')];
+  if (!devices.length) parts.push(networkHint('None yet. Other machines ask from /linggen:config.'));
+  for (const d of devices) {
+    parts.push(deviceLine(`${d.name} · ${d.ip} · since ${formatDay(d.allowed_at)}`, 'Revoke',
+      () => connectApi(`devices/${encodeURIComponent(d.id)}`, 'DELETE')));
+  }
+  if (denied.length) parts.push(devicesLabel('Denied'));
+  for (const d of denied) {
+    parts.push(deviceLine(`${d.name} · ${d.ip} · ${formatDay(d.denied_at)}`, 'Un-deny',
+      () => connectApi(`denied/${encodeURIComponent(d.device_id)}`, 'DELETE')));
+  }
+  row.replaceChildren(...parts);
+}
+
+function deviceLine(text, action, run) {
+  const line = document.createElement('div');
+  line.className = 'settings-device';
+  const span = document.createElement('span');
+  span.textContent = text;
+  const button = connectButton(action, 'settings-cancel', async () => {
+    button.disabled = true;
+    try { await run(); } catch { /* the reload shows the truth */ }
+    loadDevicesRow(line.closest('.settings-devices'));
+  });
+  line.append(span, button);
+  return line;
+}
+
+function formatDay(secs) {
+  return new Date(secs * 1000).toISOString().slice(0, 10);
+}
+
+pollConnect();
+setInterval(pollConnect, CONNECT_POLL_MS);
+document.addEventListener('visibilitychange', pollConnect);
 
 function buildHelpCard() {
   const card = document.createElement('div');

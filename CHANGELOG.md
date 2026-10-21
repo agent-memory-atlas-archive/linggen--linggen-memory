@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.11.0] - 2026-10-21 — ask to connect, click to allow
+
+Plugin manifests: CC/Codex 1.7.17.
+
+### Added
+
+- **A LAN machine asks; this machine clicks Allow or Deny.** Open routes
+  `POST /api/connect/request` and `GET /api/connect/status/{id}` (token
+  handed out once). Allow writes an engine-schema row (48-hex secret) to the
+  shared `paired-devices.json`, so `lan_gate` is unchanged. One pending
+  request at a time, 2-minute TTL, 6 requests a minute per address. Deny is
+  remembered by `device_id` (403 at once on the next ask).
+- **Console:** a banner with Allow / Deny, and Settings → Connected devices
+  (Revoke) and Denied (Un-deny).
+- **`/linggen:config --ling-mem <ip>:9528`** with no token asks that machine
+  and waits up to two minutes for the click; `--token` still works.
+
+### Security
+
+- Deciding routes (`/api/connect/pending`, `/{id}/allow|deny`, `/devices*`,
+  `/denied*`) and the network writes pass `local::require_local`: loopback
+  socket peer, a loopback `Host` with this port (DNS rebinding), and no
+  cross-site `Origin`. A paired device's token is never enough.
+
 ## [1.10.0] - 2026-10-21 — one store on the LAN
 
 Plugin manifests: CC/Codex 1.7.16, OpenClaw 0.1.11.

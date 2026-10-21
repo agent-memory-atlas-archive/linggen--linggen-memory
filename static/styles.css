@@ -679,6 +679,26 @@ input[type="text"]:disabled { opacity: 0.6; }
   cursor: pointer;
 }
 .settings-restart { margin-top: 4px; }
+.settings-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+}
+#connect-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--accent-soft);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+}
+#connect-banner[hidden] { display: none; }
+#connect-banner .settings-hint { flex-basis: 100%; order: 1; }
 .settings-hint {
   margin: 0;
   font-size: 12px;

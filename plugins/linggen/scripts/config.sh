@@ -14,7 +14,8 @@
 #
 #   config.sh                              # show what is configured, and probe it
 #   config.sh --ling http://192.168.1.5:9527
-#   config.sh --ling-mem 192.168.1.5:9528 --token <device-token>
+#   config.sh --ling-mem 192.168.1.5:9528  # asks that machine; approve it there
+#   config.sh --ling-mem 192.168.1.5:9528 --token <device-token>   # manual
 #   config.sh --local                      # back to this machine
 #
 # Writes ~/.linggen/client.json, which the hooks read. Also mirrors the two
@@ -73,6 +74,7 @@ current() { [ -r "$CLIENT_FILE" ] && jq -r --arg k "$1" '.[$k] // empty' "$CLIEN
 cur_ling="$(current ling)"
 cur_ling_mem="$(current ling_mem)"
 cur_token="$(current token)"
+cur_device_id="$(current device_id)"
 
 if [ "$reset" = 1 ]; then
     new_ling="$DEFAULT_LING"; new_ling_mem="$DEFAULT_LING_MEM"; new_token=""
@@ -103,7 +105,7 @@ probe() { # $1 base url, $2 token — prints a one-line verdict
         "$base/mcp" 2>/dev/null)"
     case "$tools" in
         200) ;;
-        401|403) printf 'reachable, but this host is not paired — pair on that machine, then --token <t>'; return 1 ;;
+        401|403) printf 'reachable, but this host is not approved — run /linggen:config --ling-mem <addr> to ask'; return 1 ;;
         000) printf 'no answer'; return 1 ;;
         *)   printf 'HTTP %s from /mcp' "$tools"; return 1 ;;
     esac
@@ -113,6 +115,68 @@ probe() { # $1 base url, $2 token — prints a one-line verdict
         "$base/api/health" 2>/dev/null | jq -r '.version // .data.version // empty' 2>/dev/null)"
     printf 'ok%s' "$([ -n "$ver" ] && printf ' · %s' "$ver")"
 }
+
+# ── Ask to connect ──────────────────────────────────────────────────────────
+#
+# Pointed at another machine with no token: ask it. The Mac shows the request
+# (Linggen or the ling-mem console); a click there hands this host a token,
+# which is saved below like a typed --token. Nobody sees or copies it.
+
+mcp_code() { # $1 base, $2 token — HTTP status of an MCP tools/list
+    local auth=()
+    [ -n "${2:-}" ] && auth=(-H "x-linggen-device: $2")
+    curl -s -o /dev/null -w '%{http_code}' --max-time 5 --connect-timeout 2 \
+        -H 'Content-Type: application/json' ${auth[@]+"${auth[@]}"} \
+        -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' "$1/mcp" 2>/dev/null
+}
+
+new_uuid() {
+    { uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null \
+        || od -An -N16 -tx1 /dev/urandom | tr -d ' \n'; } | tr 'A-Z' 'a-z'
+}
+
+device_id="${cur_device_id:-$(new_uuid)}"
+device_name="$(hostname -s 2>/dev/null || hostname)"
+
+ask_status() { # $1 base, $2 request id — prints the status JSON
+    curl -s --max-time 5 --connect-timeout 2 "$1/api/connect/status/$2" 2>/dev/null
+}
+
+ask_to_connect() { # $1 base — prints the token, or dies with why not
+    local base="$1" body reply code rid st
+    body="$(jq -nc --arg n "$device_name" --arg d "$device_id" '{device_name: $n, device_id: $d}')"
+    reply="$(curl -s -w '\n%{http_code}' --max-time 5 --connect-timeout 2 \
+        -H 'Content-Type: application/json' -d "$body" "$base/api/connect/request" 2>/dev/null)"
+    code="${reply##*$'\n'}"
+    case "$code" in
+        200) ;;
+        403) die "config: that machine denied $device_name. Un-deny it in its ling-mem console, then retry." ;;
+        429) die "config: too many requests — wait a minute and retry." ;;
+        *)   die "config: could not ask $base to connect (HTTP $code)." ;;
+    esac
+    rid="$(printf '%s' "${reply%$'\n'*}" | jq -r '.data.request_id // empty')"
+    [ -n "$rid" ] || die "config: $base did not open a request."
+    printf 'Approve %s on the Mac (Linggen or the ling-mem console)…\n' "$device_name" >&2
+    for _ in $(seq 1 60); do
+        st="$(ask_status "$base" "$rid")"
+        case "$(printf '%s' "$st" | jq -r '.data.state // empty' 2>/dev/null)" in
+            allowed) printf '%s' "$st" | jq -r '.data.device_token // empty'; return 0 ;;
+            denied)  die "config: denied on that machine." ;;
+            expired) die "config: the request expired — run this again." ;;
+        esac
+        sleep 2
+    done
+    die "config: no answer within two minutes — run this again."
+}
+
+if [ "$show_only" = 0 ] && [ "$reset" = 0 ] && [ -z "$token" ]; then
+    case "$(mcp_code "$new_ling_mem" "$new_token")" in
+        401|403)
+            new_token="$(ask_to_connect "$new_ling_mem")" || exit 1
+            [ -n "$new_token" ] || die "config: approved, but no token came back — run this again."
+            printf 'Approved.\n' >&2 ;;
+    esac
+fi
 
 if [ "$show_only" = 1 ]; then
     printf 'ling      %s  ' "$new_ling";     probe "$new_ling"     ""           || true; printf '\n'
@@ -124,8 +188,8 @@ fi
 
 mkdir -p "$DATA_DIR" 2>/dev/null || die "config: cannot create $DATA_DIR"
 tmp="$CLIENT_FILE.tmp.$$"
-jq -n --arg l "$new_ling" --arg m "$new_ling_mem" --arg t "$new_token" \
-    '{ling: $l, ling_mem: $m, token: $t}' > "$tmp" || die "config: could not write $tmp"
+jq -n --arg l "$new_ling" --arg m "$new_ling_mem" --arg t "$new_token" --arg d "$device_id" \
+    '{ling: $l, ling_mem: $m, token: $t, device_id: $d}' > "$tmp" || die "config: could not write $tmp"
 mv "$tmp" "$CLIENT_FILE" || die "config: could not replace $CLIENT_FILE"
 
 # ── Mirror into Claude Code's env ───────────────────────────────────────────
