@@ -679,6 +679,15 @@ input[type="text"]:disabled { opacity: 0.6; }
   cursor: pointer;
 }
 .settings-restart { margin-top: 4px; }
+.settings-primary input[type="text"] {
+  flex: 1;
+  font-size: 13px;
+  padding: 6px 10px;
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
 .settings-device {
   display: flex;
   align-items: center;

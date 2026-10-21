@@ -14,8 +14,10 @@
 #
 #   config.sh                              # show what is configured, and probe it
 #   config.sh --ling http://192.168.1.5:9527
-#   config.sh --ling-mem 192.168.1.5:9528  # asks that machine; approve it there
-#   config.sh --ling-mem 192.168.1.5:9528 --token <device-token>   # manual
+#   config.sh --primary 192.168.1.5:9528   # this machine's ling-mem follows that one
+#   config.sh --primary local              # this machine's memory is the primary
+#   config.sh --ling-mem 192.168.1.5:9528  # legacy: point clients at another machine
+#   config.sh --ling-mem 192.168.1.5:9528 --token <device-token>   # legacy, manual
 #   config.sh --local                      # back to this machine
 #   config.sh --mirror                     # re-mirror client.json into the hosts (hooks)
 #
@@ -43,7 +45,7 @@ command -v curl >/dev/null 2>&1 || die "config: curl is required"
 
 # ── Arguments ───────────────────────────────────────────────────────────────
 
-ling="" ling_mem="" token="" reset=0 show_only=1 mirror_only=0
+ling="" ling_mem="" token="" reset=0 show_only=1 mirror_only=0 primary=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -51,6 +53,7 @@ while [ $# -gt 0 ]; do
         --ling-mem) ling_mem="${2:-}"; shift 2; show_only=0 ;;
         --token)    token="${2:-}";    shift 2; show_only=0 ;;
         --local)    reset=1;           shift;   show_only=0 ;;
+        --primary)  primary="${2:-}";  shift 2 ;;
         --mirror)   mirror_only=1;     shift;   show_only=0 ;;
         -h|--help)  sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *)          die "config: unknown argument $1" ;;
@@ -277,13 +280,80 @@ guide() {
     ms="$(state_of "$new_ling_mem" "$new_token")"
     printf 'ling      %s  %s\n' "$new_ling" "$(label "$ls" "$new_ling")"
     printf 'ling-mem  %s  %s\n' "$new_ling_mem" "$(label "$ms" "$new_ling_mem")"
+    local role
+    role="$(local_role)"
+    [ -n "$role" ] && printf 'memory    %s\n' "$(role_line "$role")"
     printf '\n'
-    next_step "$ls" "$ms"
+    if ! is_local "$new_ling_mem"; then
+        echo "Next: run /linggen:config --primary ${new_ling_mem#*://}, then /linggen:config --local."
+        echo "(This machine keeps its own copy and works offline.)"
+    elif [ -n "$role" ] && [ -n "$(role_next "$role")" ]; then
+        role_next "$role"
+    else
+        next_step "$ls" "$ms"
+    fi
     printf '\nCommon:\n'
-    printf '  /linggen:config --ling-mem <ip>:9528   use memory on another machine\n'
-    printf '  /linggen:config --local                use this machine again\n'
-    printf '  /linggen:config                        check again\n'
+    printf '  /linggen:config --primary <ip>:9528   share the memory of another machine\n'
+    printf '  /linggen:config --primary local       this machine holds the memory\n'
+    printf '  /linggen:config                       check again\n'
 }
+
+# ── Primary or replica (the recommended way to share memory) ────────────────
+#
+# Every machine runs its own ling-mem and every client talks to it on
+# loopback. That daemon is the primary, or a replica of another machine's
+# primary — set here, kept by ling-mem itself (`/api/sync/*`). Becoming a
+# replica asks the primary to connect; someone clicks Allow there.
+
+LOCAL_MEM="http://127.0.0.1:9528"
+
+local_role() { curl -fsS --max-time 3 "$LOCAL_MEM/api/sync/role" 2>/dev/null | jq -c '.data // empty' 2>/dev/null; }
+
+role_line() { # $1 role JSON — one line of facts
+    printf '%s' "$1" | jq -r '
+        if .role == "primary" then "primary (this machine)"
+        else "replica of \(.upstream) · "
+            + (if .approved | not then "not approved yet"
+               elif .online then "online" else "offline" end)
+            + (if .last_sync then " · last sync \(.last_sync[0:16])Z" else "" end)
+            + " · \(.queued) queued"
+        end'
+}
+
+role_next() { # $1 role JSON — the next step, or nothing
+    printf '%s' "$1" | jq -r '
+        if .role == "primary" then empty
+        elif .waiting_for_approval then "Next: click Allow on \(.upstream | split(":")[0]) (Linggen or the ling-mem console)."
+        elif .error and (.approved | not) then "Next: \(.error). Run /linggen:config --primary \(.upstream) to ask again."
+        elif .online | not then "The primary is offline. Writes queue here and replay when it is back."
+        elif .error then "Next: \(.error)."
+        else empty end'
+}
+
+set_primary() { # $1 host:port | local
+    local reply role i
+    reply="$(curl -sS --max-time 10 -X PUT -H 'Content-Type: application/json' \
+        -d "$(jq -nc --arg p "$1" '{primary: $p}')" "$LOCAL_MEM/api/sync/primary" 2>/dev/null)" \
+        || die "config: ling-mem is not running here. Start it: ling-mem start"
+    printf '%s' "$reply" | jq -e '.ok' >/dev/null 2>&1 \
+        || die "config: $(printf '%s' "$reply" | jq -r '.error // "refused"')"
+    role="$(printf '%s' "$reply" | jq -c '.data')"
+    if printf '%s' "$role" | jq -e '.waiting_for_approval' >/dev/null; then
+        printf 'Approve %s on %s (Linggen or the ling-mem console)…\n' "$device_name" "${1%%:*}"
+        for i in $(seq 1 65); do
+            sleep 2
+            role="$(local_role)"
+            printf '%s' "$role" | jq -e '.waiting_for_approval | not' >/dev/null 2>&1 && break
+        done
+    fi
+    printf 'memory    %s\n' "$(role_line "$role")"
+    role_next "$role"
+}
+
+if [ -n "$primary" ]; then
+    set_primary "$primary"
+    exit 0
+fi
 
 if [ "$show_only" = 1 ]; then
     guide

@@ -328,6 +328,14 @@ One rule makes the open port safe: **a non-loopback request must carry a paired 
 
 **The auth is not new.** Both daemons live under the same `~/.linggen`, so this reads the very file Linggen's pairing flow writes — pair once, on the Mac's screen, and both daemons accept that device. Nothing here mints a token; `src/http/gate.rs` only ever reads.
 
+## Primary and replicas
+
+Every machine runs its own daemon; every client (plugin hooks, MCP, the engine, the CLI) talks to it on loopback. The daemon is the **primary** (default) or a **replica** of another machine's primary (`src/replica/`, state in `memory/.replica.json`). Set from the console (Settings → Primary), the engine's Settings, or `/linggen:config --primary <host:port|local>`; becoming a replica runs the connect request against the primary and keeps the issued token in the daemon.
+
+- **Sync.** Every write primitive records ids in `memory/.changes.jsonl` under a monotonic sequence. A replica pulls `GET /api/sync/changes?since=<cursor>` (paired token) every 30 s and after writes: current rows with vectors (upserted by id into the table they live in), tombstones, `.days.json`, `.issues.json`. A different embedding model stops sync.
+- **Writes** on a replica forward to the primary (its handlers and guards decide) or, offline, apply locally and queue in `memory/.outbox.json`, replayed in order. Primary wins: a queued write whose rows changed meanwhile, or that the primary refuses, files a `replica-conflict` review item and restores the rows.
+- **Dreaming** is the primary's: per-day lease `POST /api/memory/dream_lease` (30 min, renewable); `remember_day` refuses a day another holder leased; a replica refuses dreaming, the sweep and the schema step.
+
 ## Skill integration
 
 The **linggen-memory skill** is a thin wrapper in the main Linggen repo's skills tree. Its responsibilities:

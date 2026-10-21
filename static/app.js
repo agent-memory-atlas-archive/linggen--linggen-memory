@@ -2231,6 +2231,7 @@ async function buildSettingsCard() {
         Default 0.6. Higher = stricter (fewer, more relevant); lower = broader.
       </p>
     </div>
+    <div class="settings-row settings-primary"></div>
     <div class="settings-row settings-network"></div>
     <div class="settings-row settings-devices"></div>
     <div class="settings-actions">
@@ -2239,6 +2240,7 @@ async function buildSettingsCard() {
     </div>
     <p class="settings-status" hidden></p>
   `;
+  await loadPrimaryRow(card.querySelector('.settings-primary'));
   await loadNetworkRow(card.querySelector('.settings-network'));
   await loadDevicesRow(card.querySelector('.settings-devices'));
   card.querySelector('.help-close').addEventListener('click', closeSettings);
@@ -2399,6 +2401,60 @@ async function healthOk() {
     return (await fetch('/api/health', { cache: 'no-store' })).ok;
   } catch {
     return false;
+  }
+}
+
+// ── Primary (inside Settings) ──────────────────────────────────────
+// This machine's memory is the primary, or a replica of another machine's.
+// Clients always talk to this daemon; a replica keeps a copy and syncs.
+
+async function syncApi(path, init) {
+  const resp = await fetch(`/api/sync/${path}`, init);
+  const json = await resp.json();
+  if (!json?.ok) throw new Error(json?.error ?? `HTTP ${resp.status}`);
+  return json.data;
+}
+
+function roleFact(r) {
+  if (r.role === 'primary') return 'This machine holds the memory.';
+  const state = !r.approved ? 'not approved yet' : r.online ? 'online' : 'offline';
+  const last = r.last_sync ? ` · last sync ${new Date(r.last_sync).toLocaleString()}` : '';
+  return `Replica of ${r.upstream} · ${state}${last} · ${r.queued} queued`;
+}
+
+async function loadPrimaryRow(row) {
+  try {
+    renderPrimaryRow(row, await syncApi('role'));
+  } catch (err) {
+    row.replaceChildren(devicesLabel('Primary'), networkHint(`Unavailable: ${err.message}`));
+  }
+}
+
+function renderPrimaryRow(row, r) {
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = 'local, or 192.168.1.5:9528';
+  input.value = r.role === 'primary' ? 'local' : (r.upstream ?? '');
+  const save = connectButton('Save', 'settings-save', () => savePrimary(row, input.value));
+  const line = document.createElement('div');
+  line.className = 'settings-device';
+  line.append(input, save);
+  const parts = [devicesLabel('Primary'), line, networkHint(roleFact(r))];
+  if (r.waiting_for_approval) parts.push(networkHint(`Click Allow on ${r.upstream.split(':')[0]}.`));
+  else if (r.error) parts.push(networkHint(r.error));
+  row.replaceChildren(...parts);
+  if (r.waiting_for_approval) setTimeout(() => row.isConnected && loadPrimaryRow(row), 2000);
+}
+
+async function savePrimary(row, value) {
+  try {
+    renderPrimaryRow(row, await syncApi('primary', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ primary: value.trim() || 'local' }),
+    }));
+  } catch (err) {
+    row.appendChild(networkHint(`Not saved: ${err.message}`));
   }
 }
 

@@ -55,6 +55,18 @@ never write them.
   per scope/index/summary fix → one final totals sentence. Never print a
   status line for a call you didn't make.
 
+## Before any dream — where it runs
+
+Memory is dreamed on the **primary** machine, by its Linggen engine when it
+has one.
+
+- `memory_role` first. `role: replica` → reply exactly
+  `Memory is dreamed on the primary (<upstream>)` and stop.
+- On the primary, if the Linggen engine's `memory_dream_run` tool answers,
+  offload to it (pass the date when one was given), say the engine is
+  dreaming, and stop. Run the pass below yourself only when no engine
+  answers on this machine.
+
 ## `dream` (no argument) — remember all undreamed days
 
 0. **Snapshot + in-flight check.** `ling-mem export` once (a store
@@ -108,6 +120,9 @@ Backfill staging, always user-triggered, idempotent:
 
 ## Remember one day
 
+0. **Lock the day.** `{"verb":"dream_lease","day":"<date>","holder":"claude-code@<host>","action":"acquire"}`
+   (MCP `memory_dream_lease`) before reading anything — one executor per
+   day. Refused → report the reason verbatim and skip the day.
 1. **Re-pend check.** From the `days` rollup, note the day's
    `remembered_at`. If set, only rows created after it need judging —
    earlier rows were already judged, and the worklist leaves them out.
@@ -156,10 +171,11 @@ Backfill staging, always user-triggered, idempotent:
      the contradicting row alongside the old one; recall-time
      reconciliation (user present) picks winners. Your own derived
      notes are the exception (Merge above).
-5. **Stamp.** `{"verb":"remember_day","date":"<date>","judged":<seen>,"promoted":<adds>}`
+5. **Stamp.** `{"verb":"remember_day","date":"<date>","judged":<seen>,"promoted":<adds>,"holder":"claude-code@<host>"}`
    (CLI: `ling-mem remember-day <date> --judged N --promoted K`).
    Never skip the stamp, even with zero promotions — it's what moves
-   the day marked dreamed.
+   the day marked dreamed. Then release the lock:
+   `{"verb":"dream_lease","day":"<date>","holder":"claude-code@<host>","action":"release"}`.
 
 ## Forget (the sweep)
 

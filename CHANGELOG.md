@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.12.0] - 2026-10-21 — every machine keeps its own copy
+
+Plugin manifests: CC/Codex 1.7.19, OpenClaw 0.1.12.
+
+### Added
+
+- **Primary or replica.** Every machine runs its own ling-mem and every
+  client talks to it on loopback. A replica (`PUT /api/sync/primary
+  {primary: "host:port"}`, this machine only) asks the primary to connect,
+  keeps the token itself (`memory/.replica.json`, 0600), serves reads from
+  its copy, and pulls `GET /api/sync/changes` every 30 s and after writes.
+  `GET /api/sync/role` shows role, upstream, online, last sync, queued.
+- **Change log:** every write primitive records its ids under a monotonic
+  per-store sequence (`memory/.changes.jsonl`, seeded on first start);
+  `/api/sync/changes` returns current rows with vectors, tombstones, the
+  day records, the review queue and the embedding model (a replica with a
+  different model refuses to sync).
+- **Writes on a replica** are forwarded to the primary (its guards decide,
+  the user-voice rule included) or, offline, applied locally and queued in
+  `memory/.outbox.json`; replayed in order when the primary is back. A
+  queued write whose rows the primary changed meanwhile, or that the
+  primary refuses, files a `replica-conflict` review item and the primary's
+  version stands.
+- **Dream lock:** `POST /api/memory/dream_lease {day, holder, action}`
+  (MCP `memory_dream_lease`), 30-minute renewable lease per day;
+  `remember_day` refuses a day another holder leased. A replica refuses
+  dreaming, the sweep and the schema step: "Memory is dreamed on the
+  primary (<host>)". MCP `memory_role`.
+- **Console:** Settings → Primary. **Plugin:** `/linggen:config --primary
+  <host:port|local>`; the no-argument guide shows the role line;
+  `/linggen:dream` and `/linggen:solve` stop on a replica, and on the
+  primary prefer the engine's `memory_dream_run`.
+
 ## [1.11.0] - 2026-10-21 — ask to connect, click to allow
 
 Plugin manifests: CC/Codex 1.7.18.
