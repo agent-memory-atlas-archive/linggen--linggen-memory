@@ -126,9 +126,9 @@ row's directory. One table, `scope::KIN_WEIGHTS`:
   (cosine), `raw_hybrid` and `scope_weight` for inspection.
 - Rows deeper below the root count by distance like any other, so a
   session at `$HOME` does not take every project for its own.
-- The pool is every live non-app row — the flat scan an unscoped search
-  always ran (about 1.8k rows, ~0.6 s per two-table search in a debug
-  build). Revisit with an ANN index near 100k rows.
+- The pool is every live non-app row — the same flat scan an unscoped
+  search always ran (about 1.8k rows today). Revisit with an ANN index
+  near 100k rows.
 - Keyword boost tokens: a run of one script. CJK runs index as character
   bigrams (a lone character as itself), so `和move有什么不同` yields `move`
   and `不同`. Query terms of two ASCII characters or fewer (`go`, `s`) earn
