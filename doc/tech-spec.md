@@ -222,7 +222,7 @@ until a reindex — reintroducing the "my memory isn't findable" failure.
 In-process scoring is always current. Revisit at ~100k rows (same flat-scan
 threshold the vector path and `list` already flag).
 
-`min_score` gates the **hybrid** score (default `recall_min_score`, 0.6).
+`min_score` gates the **hybrid** score (default `recall_min_score`, 0.7).
 A keyword hit whose cosine alone falls under the floor is admitted because
 the boost lifts it over the line — e.g. "…male dog named Yinyue…" (cosine
 ~0.55 to the bare query "dog") clears 0.6 once boosted — while low-cosine
