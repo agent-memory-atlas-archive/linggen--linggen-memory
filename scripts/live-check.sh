@@ -538,6 +538,8 @@ if [ "$COPY_LIVE" = 1 ]; then
   PORT="$FPORT"
 
   section "Schema migration on scratch copies"
+  # Migration backups expire after 14 days (src/memory/backups.rs), so these
+  # checks skip once the live v1 copies are gone; cargo test covers v1 → v2.
   B="$REAL_HOME/.linggen/memory/backups"
   WITH="$(ls -d "$B"/schema-v2-* 2>/dev/null | tail -1)"
   WITHOUT="$(ls -d "$B"/pre-scope-deploy-* 2>/dev/null | tail -1)"

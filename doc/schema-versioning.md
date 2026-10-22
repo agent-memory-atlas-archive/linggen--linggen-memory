@@ -90,7 +90,7 @@ unmigrated store.
 
 | From → to | What | When it runs |
 |---|---|---|
-| 1 → 2 (2026-10-04) | Drop `contexts` and `tags`; rename `hook` → `summary` and `cwd` → `scope`, values carried (`doc/scope-index-spec.md`). `summary` + `indexed` are additive and ride `ensure_late_schema_additions` (a v1 store that already took the pair holds the first as `hook`; one that never did gets `summary` at open). | **Gated** — only on `ling-mem apply-schema --yes` (daemon: `POST /api/schema/apply {"confirm":true}`). It backs up to `~/.linggen/memory/backups/schema-v2-<UTC timestamp>/`, reshapes both tables, then stamps the sidecar `2`. Never at open. |
+| 1 → 2 (2026-10-04) | Drop `contexts` and `tags`; rename `hook` → `summary` and `cwd` → `scope`, values carried (`doc/scope-index-spec.md`). `summary` + `indexed` are additive and ride `ensure_late_schema_additions` (a v1 store that already took the pair holds the first as `hook`; one that never did gets `summary` at open). | **Gated** — only on `ling-mem apply-schema --yes` (daemon: `POST /api/schema/apply {"confirm":true}`). It backs up to `~/.linggen/memory/backups/schema-v2-<UTC timestamp>/` (kept 14 days, then removed by the daemon), reshapes both tables, then stamps the sidecar `2`. Never at open. |
 
 A gated step changes the open-time contract in one way: a store waiting on
 it opens normally, `run_migrations` skips the step, and the sidecar keeps the

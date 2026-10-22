@@ -147,7 +147,7 @@ The schema v2 step (`doc/schema-versioning.md`) drops `contexts` and
 runs only on `ling-mem apply-schema --yes` (daemon:
 `POST /api/schema/apply {"confirm":true}`), never at open:
 
-1. Back up the store to `~/.linggen/memory/backups/schema-v2-<UTC stamp>/`.
+1. Back up the store to `~/.linggen/memory/backups/schema-v2-<UTC stamp>/` (kept 14 days, then removed by the daemon's maintenance loop).
 2. Reshape both tables.
 3. Stamp the SCHEMA_VERSION sidecar 2.
 

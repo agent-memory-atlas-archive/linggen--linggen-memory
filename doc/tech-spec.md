@@ -46,8 +46,24 @@ Respect `LINGGEN_DATA_DIR` env var (convention shared with the main Linggen bina
 ```
 $LINGGEN_DATA_DIR/
 └── memory/
-    └── memory.lancedb/  # one LanceDB dir; holds the `semantic` + `episodic` tables
+    ├── memory.lancedb/  # one LanceDB dir; holds the `semantic` + `episodic` tables
+    └── backups/
+        ├── store-YYYY-MM-DD.ndjson     # daily snapshot (engine, per memory-agent run day) — newest 7 kept
+        └── <kind>-<UTC stamp>/         # migration backup, full store copy — kept 14 days
 ```
+
+**Backup retention** (`src/memory/backups.rs`, run by the daemon's
+maintenance loop every 10 min, not gated on idle). Migration backups are
+directories named `<kind>-<YYYYMMDDTHHMMSSZ>/`, where `<kind>` is one of
+`MIGRATION_BACKUP_KINDS` — `schema-v2` (`apply-schema`) and
+`scope-migration` (the retired 2026-10-04 scope review) — the one place the
+pattern is named; a new migration registers its kind there and builds its
+path with `migration_backup_dir`. Each is removed 14 days after its stamp
+(the directory's mtime when the name carries none), so a backup younger
+than 14 days — the newest included — always stays. Daily snapshots keep
+the newest 7. Each removal is logged. Only direct children of `backups/`
+that match one of the two patterns are touched; anything else there — an
+unknown file, a hand-made copy, a symlink — is left alone.
 
 Multi-user isolation is path-level, not in-row: Linggen sets `LINGGEN_DATA_DIR` per user context before invoking `ling-mem`. The binary is single-user per invocation and has no `user_id` concept.
 
@@ -389,7 +405,8 @@ The rule that makes `^1` auto-update safe: **a non-migratable store change is al
 and renames `cwd` → `scope`, `hook` → `summary`, values carried. It is a
 **gated** step — it runs only on `ling-mem apply-schema --yes` (daemon:
 `POST /api/schema/apply {"confirm":true}`), which backs up to
-`memory/backups/schema-v2-<UTC timestamp>/` first; until then the store
+`memory/backups/schema-v2-<UTC timestamp>/` first (kept 14 days — see
+*Backup retention*); until then the store
 opens and works as v1 (sidecar stays `1`, so older binaries still open it).
 
 `1.0.0` baseline: `STORE_SCHEMA_VERSION = 1`. A pre-1.0 (`0.7.x`) store carries no sidecar → classified `Adopt` → stamped `1` on first 1.x open; the Arrow schema is unchanged across the boundary, so the migration is a no-op. The `--migrate-data` subcommand idea is superseded by `ling-mem export | import` (schema-agnostic JSONL — the escape hatch for the non-migratable/MAJOR case).
