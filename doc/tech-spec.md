@@ -262,14 +262,17 @@ hosts only hand the daemon paths.
 - **Root**: the git root of the session cwd; outside git, where the
   session started. A skill's own dir (`~/.linggen/skills/<name>`) is its
   own root. Hosts send it (`root`); the daemon finds it when they don't.
-- **Recall scope** (`scope_root` = root), applied in SQL before ranking:
-  an owner root sees rows under it (any depth), rows at its parents and
-  rows with no `scope`; a skill's dir sees only rows under it; `$HOME`,
-  `~/.linggen` and temp dirs see rows with no `scope`, plus at most two rows
-  filed under a directory whose cosine reaches `no_root_project_min_score`
-  (config, default 0.70; never `preference` rows). While a store
-  still has the v1 `contexts` column, a skill scope also matches rows
-  tagged with the skill's name.
+- **Recall scope** (`scope_root` = root). Search: a skill's dir sees only
+  rows under it (SQL filter, unweighed); any other root filters out only
+  the apps' rows (`~/.linggen/skills/…`) and weighs every other row's
+  `(cosine + keyword boost)` by its directory's tree distance from the
+  root — same 1.1, child 1.0, parent 0.9, d=2 0.85, d>2 0.8, no scope 1.0
+  (`scope::KIN_WEIGHTS`); `min_score` gates the weighted score and the
+  shown `hybrid_score` is it clamped to 1.0. List keeps the SQL filter: an
+  owner root sees rows under it (any depth), rows at its parents and rows
+  with no `scope`; `$HOME`, `~/.linggen` and temp dirs see rows with no
+  `scope`. While a store still has the v1 `contexts` column, a skill
+  scope also matches rows tagged with the skill's name.
 - **Writing**: `memory_add` takes the model's `scope` (a candidate from
   the session-start line), resolved against `root` and accepted when it
   is an existing directory inside root or a parent of root below `$HOME`;

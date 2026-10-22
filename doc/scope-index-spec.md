@@ -87,20 +87,71 @@ host offers candidates and the model picks.
 
 ## Recall scope
 
-- **Owner sessions**: rows under root (any depth), rows at a parent of root,
-  and rows with no scope. Applied in the daemon before ranking.
 - **Skill sessions** (cwd under `~/.linggen/skills/<name>`): rows under that
-  directory only, no person rows — today's app isolation, keyed by path
-  instead of `contexts`. `is_project_dir` stops rejecting
-  `~/.linggen/skills/*`; `~/.linggen` itself and `$HOME` stay non-scopes.
-- **No root** (`$HOME`, `~/.linggen`, temp — Yinyue, a plain chat): rows with
-  no scope, plus at most 2 rows filed under a directory when they match the
-  question strongly (cosine ≥ `no_root_project_min_score`, default 0.70 —
-  chosen from live queries 2026-10-04: small talk peaked at 0.68, on-topic
-  project questions reached 0.71–0.79). `preference` rows with a scope never
-  qualify: dev and project rules must not ride into everyday chat; facts and
-  decisions about the work can. Applied in the daemon's search, so every host
-  gets the same rule. (Approved by Hanli 2026-10-04.)
+  directory only, no person rows — app isolation, keyed by path. A hard
+  filter in SQL, on search and list, unweighed. `~/.linggen` itself and
+  `$HOME` stay non-scopes.
+- **Every other search with a root** — a project, `$HOME`, `~/.linggen`, a
+  temp dir alike: no scope filter. Every live row except the apps' (rows
+  under `~/.linggen/skills/` never reach non-app recall: dev memory stays
+  out of game memory and game memory out of dev chat) is scored and
+  weighed by where its directory sits relative to the root (below).
+  (Decided by Hanli 2026-10-22; replaces the owner filter — rows under
+  root, at its parents and with no scope — and the no-root rule of person
+  rows plus at most two strong non-preference matches, cosine ≥
+  `no_root_project_min_score`. That config key is gone.)
+- **No root** sent: no filter, no weight.
+- **`list`** with a root keeps the filter: an owner root sees rows under it,
+  at its parents and with no scope; `$HOME`/`~/.linggen`/temp see rows with
+  no scope. A browse has no score to weigh.
+
+### Recall weights
+
+`d` = steps from the root up to the common ancestor plus steps down to the
+row's directory. One table, `scope::KIN_WEIGHTS`:
+
+| Row's directory | Kin | Weight |
+|---|---|---|
+| the root itself (d = 0) | same | 1.1 |
+| one step below the root | child | 1.0 |
+| one step above the root | parent | 0.9 |
+| d = 2: sibling, grandparent, grandchild | near | 0.85 |
+| d > 2: another project; any project from `~/.linggen/workspace` | far | 0.8 |
+| no scope (about the person) | person | 1.0 |
+
+- `score = (cosine + keyword_boost) × weight`. The weight multiplies the
+  UNCLAMPED hybrid (it can exceed 1): clamping first would cap a far row at
+  exactly its weight. `min_score` gates `score`; rows rank by it; the shown
+  `hybrid_score` is it clamped to 1.0. The JSON also carries `score`
+  (cosine), `raw_hybrid` and `scope_weight` for inspection.
+- Rows deeper below the root count by distance like any other, so a
+  session at `$HOME` does not take every project for its own.
+- The pool is every live non-app row — the flat scan an unscoped search
+  always ran (about 1.8k rows, ~0.6 s per two-table search in a debug
+  build). Revisit with an ANN index near 100k rows.
+- Keyword boost tokens: a run of one script. CJK runs index as character
+  bigrams (a lone character as itself), so `和move有什么不同` yields `move`
+  and `不同`. Query terms of two ASCII characters or fewer (`go`, `s`) earn
+  no boost: they match by chance and, being rare, weighed most. Embeddings
+  are unchanged.
+- Tuned 2026-10-22 on a copy of the live store (1,785 non-app rows), 22
+  real questions across Linggen, Lingjing, Sanji, ling-mem and plain-life
+  roots, floor 0.7. Started from Hanli's 1.2 / 1.0 / 0.9 / 0.8 / 0.7 / 1.0:
+  - **same 1.2 → 1.1.** Same-dir hybrids crowd at 0.60–0.70, so 1.2 let
+    every row ≥ 0.58 through: 111 Sanji rows for one camera question, and
+    small talk ("thanks, that's all for today") recalled two Sanji rows.
+    1.1 lets no small talk in and keeps every relevant same-dir top hit.
+  - **far 0.7 → 0.8, near 0.8 → 0.85.** Every far or near row whose hybrid
+    cleared 0.82 was relevant (an explicit Sanji question from Linggen at
+    0.93; the cat's name filed under `linggen/linggen`); the strongest far
+    noise was 0.77. 0.8 admits hybrid ≥ 0.875 only — a Sanji row needs a
+    near-exact match to reach a Linggen or plain-life question.
+  - **parent 0.9, child 1.0, person 1.0** kept: the parent rows are where
+    the cross-repo rules live (WebRTC law, 9527 restarts). At 0.9 small
+    talk still pulls two parent persona rows (0.81, 0.79 hybrid), but 0.85
+    would drop a relevant 0.80 restart rule — not separable by weight.
+  - **min_score 0.7 still fits.** At 0.6 (the daemon's
+    `recall_min_score` default) a broad Sanji question passes 150+ rows.
 
 ## Index loading
 
