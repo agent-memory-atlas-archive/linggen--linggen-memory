@@ -7,6 +7,18 @@
 # $HOME, which is a dotfiles repo at most), else CLAUDE_PROJECT_DIR (where a
 # Claude Code session started), else <cwd>. A skill's own dir
 # (~/.linggen/skills/<name>) is its own root.
+# git_root <dir> — the nearest dir at or above <dir> holding a .git (a dir,
+# or a worktree's file). Never runs git: on a Mac without developer tools
+# /usr/bin/git is a stub, and running it opens the install dialog on every
+# hook. Same walk as the OpenClaw plugin's scope.mjs.
+git_root() {
+    local dir="$1"
+    while [ -n "$dir" ] && [ "$dir" != / ]; do
+        [ -e "$dir/.git" ] && { printf '%s\n' "$dir"; return 0; }
+        dir="$(dirname "$dir")"
+    done
+}
+
 memory_root() {
     local cwd="$1" root=""
     [ -n "$cwd" ] || return 0
@@ -17,9 +29,7 @@ memory_root() {
             return 0
             ;;
     esac
-    if command -v git >/dev/null 2>&1; then
-        root="$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)"
-    fi
+    root="$(git_root "$cwd")"
     # Never $HOME, and never a repo ABOVE it (a cwd under $HOME whose git
     # root is outside it): the daemon's find_root stops at $HOME too.
     [ "$root" = "$HOME" ] && root=""
